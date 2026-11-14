@@ -4,6 +4,34 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>2.5D 橫向卷軸動作遊戲</title>
+   
+  /* 主頁面遮罩 */
+    #main-menu {
+      position: fixed; inset: 0; background: rgba(26, 32, 44, 0.95);
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+      z-index: 2000;
+    }
+    #main-menu h1 { font-size: 36px; color: #fbd38d; margin-bottom: 30px; }
+    .menu-btn {
+      padding: 14px 40px; font-size: 20px; margin: 10px; border: none; border-radius: 8px;
+      background: #3182ce; color: white; font-weight: bold; cursor: pointer;
+    }
+
+    /* 右上角設定按鈕 & 測試面板 */
+    #btn-open-settings {
+      position: fixed; top: 15px; right: 15px; z-index: 1500;
+      padding: 8px 16px; background: rgba(0,0,0,0.6); color: white;
+      border: 1px solid #cbd5e0; border-radius: 6px; font-size: 14px;
+    }
+    #settings-panel {
+      display: none; position: fixed; top: 55px; right: 15px; width: 260px;
+      background: rgba(45, 55, 72, 0.95); border: 2px solid #cbd5e0; border-radius: 10px;
+      padding: 15px; z-index: 1500; font-size: 14px;
+    }
+    #settings-panel button, #settings-panel select {
+      width: 100%; margin-top: 8px; padding: 6px; border-radius: 4px; border: none;
+    }
+
   <style>
     * {
       box-sizing: border-box;
@@ -13,6 +41,45 @@
       touch-action: none; /* 防止雙擊放大或滑動頁面 */
     }
     body {
+        <!-- 1. 遊戲主頁面 -->
+  <div id="main-menu">
+    <h1>2.5D 橫向動作遊戲</h1>
+    <button class="menu-btn" onclick="startGame()">開始遊戲</button>
+    <button class="menu-btn" style="background:#4a5568;" onclick="toggleSettings()">測試與設定</button>
+  </div>
+
+  <!-- 2. 右上角設定按鈕與測試面板 -->
+  <button id="btn-open-settings" onclick="toggleSettings()">⚙️ 設定 / 測試</button>
+  <div id="settings-panel">
+    <strong>🛠️ 開發者測試面板</strong>
+    <hr style="border-color:#718096;">
+    <label><input type="checkbox" id="chk-godmode"> 無限血量 (無敵)</label><br>
+    <label><input type="checkbox" id="chk-inf-mp" checked> 無限氣量 (技能無冷卻)</label>
+    
+    <div style="margin-top:10px;">跳轉關卡：
+      <select id="sel-stage" onchange="jumpToStage(this.value)">
+        <option value="0">第 1 關 (基礎練手)</option>
+        <option value="1">第 2 關 (菁英初現)</option>
+        <option value="2">第 3 關 (臭鼬王 BOSS)</option>
+        <option value="3">第 4 關 (高難混編)</option>
+        <option value="4">第 5 關 (最終 BOSS)</option>
+      </select>
+    </div>
+
+    <div style="margin-top:10px;">召喚特定敵人：
+      <select id="sel-enemy">
+        <option value="Minion">普通小兵</option>
+        <option value="DemonElite">惡魔菁英 (防空)</option>
+        <option value="LongReachElite">長距菁英 (倒地追擊)</option>
+        <option value="TeleportElite">瞬移菁英</option>
+        <option value="SkunkKingBoss">BOSS：臭鼬王</option>
+        <option value="FinalBoss">最終 BOSS</option>
+      </select>
+      <button style="background:#e53e3e; color:white;" onclick="spawnTestEnemy()">立即召喚</button>
+    </div>
+    <button style="background:#718096; color:white; margin-top:12px;" onclick="toggleSettings()">關閉面板</button>
+  </div>
+
       margin: 0;
       background-color: #1a202c;
       display: flex;
@@ -838,6 +905,42 @@
       loadStage(0);
       gameLoop();
     });
+        // ==========================================
+    // 8. 主頁面與測試面板控制邏輯
+    // ==========================================
+    let isGameStarted = false;
+
+    function startGame() {
+      document.getElementById('main-menu').style.display = 'none';
+      isGameStarted = true;
+    }
+
+    function toggleSettings() {
+      const panel = document.getElementById('settings-panel');
+      panel.style.display = (panel.style.display === 'block') ? 'none' : 'block';
+    }
+
+    function jumpToStage(stageIdx) {
+      currentStage = parseInt(stageIdx);
+      stageClearTimer = 0;
+      player.x = 150;
+      player.hp = player.maxHp;
+      loadStage(currentStage);
+      startGame(); // 如果在主頁面跳關，自動進入遊戲
+    }
+
+    function spawnTestEnemy() {
+      const type = document.getElementById('sel-enemy').value;
+      enemies.push(new Enemy(player.x + 200, player.y, type));
+    }
+
+    // 每幀自動檢查「無限血量」勾選狀態
+    setInterval(() => {
+      if (document.getElementById('chk-godmode').checked && player) {
+        player.hp = player.maxHp;
+      }
+    }, 100);
+
   </script>
 </body>
 </html>
