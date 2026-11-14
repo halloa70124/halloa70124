@@ -1,0 +1,1593 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Skunk Trail 2X - Miranda Edition</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background: #0b0b12;
+      color: #fff;
+      font-family: 'Arial', 'Microsoft JhengHei', sans-serif;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      width: 100vw;
+    }
+    #game-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #12121c;
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+      max-width: 960px;
+      max-height: 540px;
+      background: #1e293b;
+      box-shadow: 0 0 25px rgba(0,0,0,0.85);
+    }
+    /* 開局主選單覆蓋層 */
+    #title-screen {
+      position: absolute;
+      inset: 0;
+      background: rgba(12, 14, 24, 0.92);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      text-align: center;
+      padding: 16px;
+    }
+    #title-screen h1 {
+      font-size: 28px;
+      color: #38bdf8;
+      text-shadow: 0 3px 0 #0369a1;
+      margin: 0 0 6px 0;
+    }
+    #title-screen p {
+      font-size: 13px;
+      color: #cbd5e1;
+      margin: 0 0 18px 0;
+    }
+    .mode-btn {
+      width: 240px;
+      padding: 11px 16px;
+      margin: 6px;
+      border: 2px solid #38bdf8;
+      border-radius: 12px;
+      background: rgba(56, 189, 248, 0.18);
+      color: #fff;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .mode-btn.hard {
+      border-color: #f43f5e;
+      background: rgba(244, 63, 94, 0.22);
+    }
+    .mode-btn.train {
+      border-color: #a3e635;
+      background: rgba(163, 230, 53, 0.22);
+    }
+    /* 頂部測試面板按鈕 */
+    #debug-toggle {
+      position: absolute;
+      top: 44px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 30;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1.5px solid #fde047;
+      color: #fde047;
+      border-radius: 12px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: bold;
+      pointer-events: auto;
+    }
+    /* 測試外掛與召喚面板 */
+    #debug-panel {
+      display: none;
+      position: absolute;
+      top: 72px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 90%;
+      max-width: 520px;
+      max-height: 72vh;
+      overflow-y: auto;
+      background: rgba(15, 23, 42, 0.94);
+      border: 2px solid #fde047;
+      border-radius: 14px;
+      padding: 12px;
+      z-index: 40;
+      pointer-events: auto;
+      font-size: 12px;
+    }
+    #debug-panel h3 {
+      margin: 0 0 8px 0;
+      color: #fde047;
+      font-size: 13px;
+      border-bottom: 1px solid #334155;
+      padding-bottom: 4px;
+    }
+    .dbg-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .dbg-btn {
+      padding: 7px 8px;
+      border-radius: 8px;
+      border: 1px solid #475569;
+      background: #1e293b;
+      color: #f8fafc;
+      font-size: 11px;
+      font-weight: bold;
+      text-align: center;
+    }
+    .dbg-btn.on {
+      background: #15803d;
+      border-color: #4ade80;
+      color: #fff;
+    }
+    .dbg-btn.spawn {
+      background: #312e81;
+      border-color: #818cf8;
+    }
+    .dbg-btn.danger {
+      background: #7f1d1d;
+      border-color: #f87171;
+    }
+    /* 手機虛擬按鍵 */
+    #controls {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      padding: 12px 18px;
+      z-index: 20;
+    }
+    .dpad {
+      position: relative;
+      width: 132px;
+      height: 132px;
+      pointer-events: auto;
+    }
+    .btn {
+      position: absolute;
+      background: rgba(255, 255, 255, 0.16);
+      border: 2px solid rgba(255, 255, 255, 0.38);
+      border-radius: 14px;
+      color: #fff;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .btn:active, .btn.active {
+      background: rgba(56, 189, 248, 0.5);
+      border-color: #7dd3fc;
+      transform: scale(0.94);
+    }
+    #btn-up    { left: 42px; top: 0;    width: 48px; height: 48px; }
+    #btn-down  { left: 42px; bottom: 0; width: 48px; height: 48px; }
+    #btn-left  { left: 0;    top: 42px; width: 48px; height: 48px; }
+    #btn-right { right: 0;   top: 42px; width: 48px; height: 48px; }
+
+    .actions {
+      position: relative;
+      width: 196px;
+      height: 146px;
+      pointer-events: auto;
+    }
+    .act-btn {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      font-size: 11px;
+      text-align: center;
+      line-height: 1.15;
+    }
+    #btn-a   { left: 2px;   bottom: 8px;  background: rgba(56, 189, 248, 0.30); border-color: #38bdf8; }
+    #btn-b   { left: 64px;  bottom: 24px; background: rgba(163, 230, 53, 0.32); border-color: #a3e635; }
+    #btn-c   { right: 2px;  bottom: 42px; background: rgba(192, 132, 252, 0.34); border-color: #c084fc; }
+    #btn-sp  { left: 32px;  top: 2px; width: 120px; height: 40px; border-radius: 20px; background: rgba(250, 204, 21, 0.35); border-color: #fde047; font-size: 11px; }
+
+    #rotate-hint {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 10, 18, 0.95);
+      z-index: 999;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 20px;
+    }
+    @media (orientation: portrait) {
+      #rotate-hint { display: flex; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="rotate-hint">
+  <h2>📱 請將手機橫向放置</h2>
+  <p>Skunk Trail 2X 橫向動作版需要橫屏操作！</p>
+</div>
+
+<div id="game-container">
+  <canvas id="game" width="640" height="360"></canvas>
+
+  <!-- 開局模式選單 -->
+  <div id="title-screen">
+    <h1>SKUNK TRAIL 2X</h1>
+    <p>藍髮 Miranda 橫向闖關 × 三段超必殺 × 拘束逃脫</p>
+    <button class="mode-btn" onclick="startGame('normal')">▶ NORMAL 標準闖關</button>
+    <button class="mode-btn hard" onclick="startGame('hard')">🔥 HARD 高難度（解鎖合體拘束）</button>
+    <button class="mode-btn train" onclick="startGame('training')">🏋️ TRAINING 訓練場自由測試</button>
+  </div>
+
+  <!-- 頂部測試按鈕 -->
+  <button id="debug-toggle" onclick="toggleDebug()">🔧 測試/召喚選單</button>
+
+  <!-- 開發者測試外掛與召喚面板 -->
+  <div id="debug-panel">
+    <h3>⚙️ 測試外掛開關</h3>
+    <div class="dbg-grid">
+      <div class="dbg-btn" id="dbg-god" onclick="toggleCheats('god')">❤️ 血條無限: 關</div>
+      <div class="dbg-btn" id="dbg-inf" onclick="toggleCheats('inf')">⚡ 氣條無限(5珠): 關</div>
+      <div class="dbg-btn" id="dbg-ohko" onclick="toggleCheats('ohko')">💪 一擊必殺: 關</div>
+      <div class="dbg-btn" id="dbg-ai" onclick="cycleTrainAI()">🤖 訓練AI: 進攻</div>
+    </div>
+
+    <h3>👾 即時召喚敵人（出現在 Miranda 前方）</h3>
+    <div class="dbg-grid">
+      <div class="dbg-btn spawn" onclick="spawnEnemyAtPlayer('maid')">➕ 貓耳女僕小兵</div>
+      <div class="dbg-btn spawn" onclick="spawnEnemyAtPlayer('silver')">➕ 銀髮藍衣菁英(紫霧拘束)</div>
+      <div class="dbg-btn spawn" onclick="spawnEnemyAtPlayer('squirrel4')">➕ 松鼠娘四人小隊(合體大招)</div>
+      <div class="dbg-btn spawn" onclick="spawnEnemyAtPlayer('sailor')">➕ 水手服中段菁英</div>
+      <div class="dbg-btn spawn" onclick="spawnEnemyAtPlayer('priestess')">➕ 銀紫長髮大 Boss</div>
+      <div class="dbg-btn danger" onclick="clearEnemies()">🧹 清空場上敵人</div>
+    </div>
+
+    <h3>🚀 關卡傳送與控制</h3>
+    <div class="dbg-grid">
+      <div class="dbg-btn" onclick="teleportStage(1400)">📍 傳送至中段菁英區</div>
+      <div class="dbg-btn" onclick="teleportStage(2600)">📍 傳送至關底大 Boss</div>
+      <div class="dbg-btn" onclick="escapeGrab()">🔓 立即掙脫拘束</div>
+      <div class="dbg-btn" onclick="returnToTitle()">🏠 返回主選單</div>
+    </div>
+  </div>
+
+  <!-- 手機虛擬按鍵 -->
+  <div id="controls">
+    <div class="dpad">
+      <div class="btn" id="btn-up">▲</div>
+      <div class="btn" id="btn-down">▼</div>
+      <div class="btn" id="btn-left">◀</div>
+      <div class="btn" id="btn-right">▶</div>
+    </div>
+
+    <div class="actions">
+      <div class="btn act-btn" id="btn-sp">SP 特寫超必 (3珠)</div>
+      <div class="btn act-btn" id="btn-a">A 跳躍<br>(長按浮空)</div>
+      <div class="btn act-btn" id="btn-b">B 滑鏟光爆<br>(1珠)</div>
+      <div class="btn act-btn" id="btn-c">C 鎖定紫霧<br>(2珠)</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+// 音效合成引擎
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function playTone(freq, type, duration, slide = 0) {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+  if (slide) osc.frequency.exponentialRampToValueAtTime(slide, audioCtx.currentTime + duration);
+  gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start();
+  osc.stop(audioCtx.currentTime + duration);
+}
+
+function playGasSound(intensity = 1, durScale = 1) {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const now = audioCtx.currentTime;
+  const dur = 0.26 * durScale;
+  const osc = audioCtx.createOscillator();
+  const lfo = audioCtx.createOscillator();
+  const lfoGain = audioCtx.createGain();
+  const mainGain = audioCtx.createGain();
+
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(96 / intensity, now);
+  osc.frequency.exponentialRampToValueAtTime(38, now + dur);
+
+  lfo.type = 'sine';
+  lfo.frequency.setValueAtTime(28, now);
+  lfoGain.gain.setValueAtTime(22, now);
+
+  lfo.connect(lfoGain);
+  lfoGain.connect(osc.frequency);
+
+  mainGain.gain.setValueAtTime(0.18, now);
+  mainGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+  osc.connect(mainGain);
+  mainGain.connect(audioCtx.destination);
+  osc.start(now);
+  lfo.start(now);
+  osc.stop(now + dur);
+  lfo.stop(now + dur);
+}
+
+// 輸入控制
+const input = { left: false, right: false, up: false, down: false, a: false, b: false, c: false, sp: false };
+let mashCount = 0;
+
+function registerMash() {
+  mashCount++;
+}
+
+function bindButton(id, key) {
+  const el = document.getElementById(id);
+  const start = (e) => {
+    e.preventDefault();
+    input[key] = true;
+    el.classList.add('active');
+    registerMash();
+  };
+  const end = (e) => {
+    e.preventDefault();
+    input[key] = false;
+    el.classList.remove('active');
+  };
+  el.addEventListener('touchstart', start);
+  el.addEventListener('touchend', end);
+  el.addEventListener('mousedown', start);
+  el.addEventListener('mouseup', end);
+  el.addEventListener('mouseleave', end);
+}
+bindButton('btn-left', 'left');
+bindButton('btn-right', 'right');
+bindButton('btn-up', 'up');
+bindButton('btn-down', 'down');
+bindButton('btn-a', 'a');
+bindButton('btn-b', 'b');
+bindButton('btn-c', 'c');
+bindButton('btn-sp', 'sp');
+
+window.addEventListener('keydown', (e) => {
+  registerMash();
+  if (e.key === 'ArrowLeft' || e.key === 'a') input.left = true;
+  if (e.key === 'ArrowRight' || e.key === 'd') input.right = true;
+  if (e.key === 'ArrowUp' || e.key === 'w') input.up = true;
+  if (e.key === 'ArrowDown' || e.key === 's') input.down = true;
+  if (e.key === 'j' || e.key === 'z') input.a = true;
+  if (e.key === 'k' || e.key === 'x') input.b = true;
+  if (e.key === 'l' || e.key === 'c') input.c = true;
+  if (e.key === ' ' || e.key === 'v') input.sp = true;
+});
+window.addEventListener('keyup', (e) => {
+  if (e.key === 'ArrowLeft' || e.key === 'a') input.left = false;
+  if (e.key === 'ArrowRight' || e.key === 'd') input.right = false;
+  if (e.key === 'ArrowUp' || e.key === 'w') input.up = false;
+  if (e.key === 'ArrowDown' || e.key === 's') input.down = false;
+  if (e.key === 'j' || e.key === 'z') input.a = false;
+  if (e.key === 'k' || e.key === 'x') input.b = false;
+  if (e.key === 'l' || e.key === 'c') input.c = false;
+  if (e.key === ' ' || e.key === 'v') input.sp = false;
+});
+
+// 遊戲全域狀態與外掛變數
+const GROUND_Y = 302;
+const GRAVITY = 0.62;
+let gameMode = 'normal'; // normal, hard, training
+let stageWidth = 3200;
+let cameraX = 0;
+let screenShake = 0;
+let hitStop = 0;
+let cutInTimer = 0;
+let cutInLineIdx = 0;
+let flashOverlay = 0;
+let flashColor = '#fde047';
+
+const cheats = {
+  god: false,
+  inf: false,
+  ohko: false,
+  trainAI: 'attack' // 'attack', 'idle', 'block'
+};
+
+let particles = [];
+let trailClouds = [];
+let afterimages = [];
+let speechBubbles = [];
+let platforms = [];
+let items = [];
+let enemies = [];
+let comboCount = 0;
+let comboTimer = 0;
+let stageClear = false;
+
+function toggleDebug() {
+  const p = document.getElementById('debug-panel');
+  p.style.display = (p.style.display === 'block') ? 'none' : 'block';
+}
+
+function updateDebugUI() {
+  const g = document.getElementById('dbg-god');
+  g.textContent = `❤️ 血條無限: ${cheats.god ? '開' : '關'}`;
+  g.classList.toggle('on', cheats.god);
+
+  const inf = document.getElementById('dbg-inf');
+  inf.textContent = `⚡ 氣條無限(5珠): ${cheats.inf ? '開' : '關'}`;
+  inf.classList.toggle('on', cheats.inf);
+
+  const o = document.getElementById('dbg-ohko');
+  o.textContent = `💪 一擊必殺: ${cheats.ohko ? '開' : '關'}`;
+  o.classList.toggle('on', cheats.ohko);
+
+  const aiMap = { attack: '進攻', idle: '木樁不動', block: '自動防禦' };
+  document.getElementById('dbg-ai').textContent = `🤖 訓練AI: ${aiMap[cheats.trainAI]}`;
+}
+
+function toggleCheats(key) {
+  cheats[key] = !cheats[key];
+  if (cheats.inf && player) player.meter = 500;
+  if (cheats.god && player) player.hp = player.maxHp;
+  updateDebugUI();
+}
+
+function cycleTrainAI() {
+  const order = ['attack', 'idle', 'block'];
+  cheats.trainAI = order[(order.indexOf(cheats.trainAI) + 1) % order.length];
+  updateDebugUI();
+}
+
+function returnToTitle() {
+  document.getElementById('debug-panel').style.display = 'none';
+  document.getElementById('title-screen').style.display = 'flex';
+}
+
+function teleportStage(xPos) {
+  if (!player) return;
+  player.x = xPos;
+  player.y = GROUND_Y - 20;
+  player.vx = 0;
+  player.vy = 0;
+  document.getElementById('debug-panel').style.display = 'none';
+}
+
+function escapeGrab() {
+  if (!player) return;
+  player.grabbedBy = null;
+  if (player.state === 'grabbed') player.state = 'idle';
+  enemies.forEach(e => {
+    if (e.state === 'grabHold' || e.state === 'squirrelSquad' || e.state === 'bossGrab') {
+      e.state = 'idle';
+      e.stateTimer = 0;
+    }
+  });
+}
+
+function clearEnemies() {
+  enemies = [];
+  escapeGrab();
+}
+
+function addSpeech(owner, text, life = 45) {
+  speechBubbles = speechBubbles.filter(b => b.owner !== owner);
+  speechBubbles.push({ owner, text, life });
+}
+
+function addAfterimage(ent) {
+  afterimages.push({
+    x: ent.x, y: ent.y, facing: ent.facing,
+    state: ent.state, type: ent.type,
+    life: 11, maxLife: 11
+  });
+}
+
+function spawnParticles(x, y, color, count, isCloud = false) {
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x, y,
+      vx: (Math.random() - 0.5) * (isCloud ? 7 : 9),
+      vy: (Math.random() - 0.5) * (isCloud ? 7 : 9) - (isCloud ? 1 : 0),
+      life: isCloud ? 28 : 16,
+      size: isCloud ? (12 + Math.random() * 12) : 4,
+      isCloud,
+      color
+    });
+  }
+}
+
+// 主角：藍髮 Miranda
+class Miranda {
+  constructor() {
+    this.type = 'miranda';
+    this.x = 120;
+    this.y = GROUND_Y;
+    this.vx = 0;
+    this.vy = 0;
+    this.facing = 1;
+    this.hp = 100;
+    this.maxHp = 100;
+    this.meter = 300; // 開局送 3 顆珠方便測試
+    this.state = 'idle';
+    this.stateTimer = 0;
+    this.animFrame = 0;
+    this.tintColor = null;
+    this.tintTimer = 0;
+    this.grabbedBy = null;
+    this.aPressedPrev = false;
+  }
+
+  get orbs() {
+    return Math.floor(this.meter / 100);
+  }
+
+  update() {
+    this.animFrame++;
+    if (cheats.god) this.hp = this.maxHp;
+    if (cheats.inf) this.meter = 500;
+    if (this.tintTimer > 0) {
+      this.tintTimer--;
+      if (this.tintTimer === 0) this.tintColor = null;
+    }
+
+    // 被敵人拘束中（連打按鍵可加速掙脫！）
+    if (this.state === 'grabbed' && this.grabbedBy) {
+      this.x = this.grabbedBy.x;
+      this.y = GROUND_Y;
+      if (mashCount >= 10) {
+        mashCount = 0;
+        escapeGrab();
+        this.vy = -6;
+        addSpeech(this, 'Get off!!', 35);
+        playTone(520, 'square', 0.15, 260);
+      }
+      if (!enemies.includes(this.grabbedBy) || (this.grabbedBy.state !== 'grabHold' && this.grabbedBy.state !== 'squirrelSquad' && this.grabbedBy.state !== 'bossGrab')) {
+        this.state = 'idle';
+        this.grabbedBy = null;
+      }
+      return;
+    }
+
+    // Cut-in 全螢幕大特寫超必殺演出中 (SP 3珠)
+    if (cutInTimer > 0) {
+      cutInTimer--;
+      const lines = ['愛と', '正義と', '幸せの', 'ロイヤルはーと'];
+      const step = Math.floor((80 - cutInTimer) / 20);
+      if (step !== cutInLineIdx && step < 4) {
+        cutInLineIdx = step;
+        screenShake = 8;
+        playTone(300 + step * 90, 'square', 0.12);
+        enemies.forEach(e => {
+          if (Math.abs(e.x - this.x) < 280) {
+            e.takeDamage(cheats.ohko ? 9999 : 8, this.facing * 2, 0, '#f472b6');
+            comboCount++;
+            comboTimer = 80;
+          }
+        });
+      }
+      if (cutInTimer === 1) {
+        // 終結粉紅愛心爆擊！
+        screenShake = 15;
+        flashOverlay = 12;
+        flashColor = '#f472b6';
+        playGasSound(1.8, 1.3);
+        enemies.forEach(e => {
+          if (Math.abs(e.x - this.x) < 300) {
+            e.takeDamage(cheats.ohko ? 9999 : 25, this.facing * 14, -10, '#f472b6');
+            comboCount++;
+            comboTimer = 80;
+          }
+        });
+        this.state = 'idle';
+      }
+      return;
+    }
+
+    if (this.stateTimer > 0) {
+      this.stateTimer--;
+
+      // 1 珠技 (B)：殘影滑鏟 + 俯衝金光大爆炸（第一段影片風格）
+      if (this.state === 'slideCombo') {
+        if (this.stateTimer % 2 === 0) {
+          addAfterimage(this);
+          spawnParticles(this.x - this.facing * 18, this.y - 26, '#a3e635', 2, true);
+        }
+        enemies.forEach(e => {
+          if (Math.abs(e.x - this.x) < 56 && Math.abs(e.y - this.y) < 55 && e.hitCooldown <= 0) {
+            e.takeDamage(cheats.ohko ? 9999 : 9, this.facing * 7, -4, '#fde047');
+            e.hitCooldown = 7;
+            comboCount++;
+            comboTimer = 70;
+          }
+        });
+        // 最後階段騰空俯衝引爆巨型金黃光球！
+        if (this.stateTimer === 8) {
+          this.vy = -7;
+          addSpeech(this, '元祖 ふるーつポンチ!', 42);
+        }
+        if (this.stateTimer === 1) {
+          screenShake = 14;
+          flashOverlay = 10;
+          flashColor = '#fde047';
+          playGasSound(1.6, 1.2);
+          spawnParticles(this.x + this.facing * 20, this.y - 40, '#fde047', 26, true);
+          enemies.forEach(e => {
+            if (Math.abs(e.x - this.x) < 135) {
+              e.takeDamage(cheats.ohko ? 9999 : 18, this.facing * 13, -9.5, '#facc15');
+              comboCount++;
+              comboTimer = 70;
+            }
+          });
+        }
+      }
+
+      // 2 珠技 (C)：背後鎖定抱摔 + 蓄力濃紫毒氣大噴發（第三段影片風格）
+      if (this.state === 'purpleHold') {
+        if (this.stateTimer > 38) {
+          addAfterimage(this);
+          // 尋找眼前目標鎖住
+          if (!this.lockedEnemy) {
+            const target = enemies.find(e => Math.abs(e.x - this.x) < 75 && e.hp > 0);
+            if (target) {
+              this.lockedEnemy = target;
+              target.state = 'locked';
+              this.vx = 0;
+              addSpeech(this, 'ぷぷぷ～と いっきまぁすよぉ～', 36);
+            }
+          }
+        }
+        if (this.lockedEnemy) {
+          this.lockedEnemy.x = this.x - this.facing * 22;
+          this.lockedEnemy.y = this.y;
+          // 高頻抖動蓄力
+          if (this.stateTimer % 3 === 0) {
+            spawnParticles(this.x, this.y - 45, '#f472b6', 2, false);
+          }
+          if (this.stateTimer === 16) {
+            addSpeech(this, 'も……もぉガマン できません！！！', 38);
+          }
+          if (this.stateTimer === 4) {
+            screenShake = 16;
+            playGasSound(2.2, 1.5);
+            spawnParticles(this.lockedEnemy.x, this.lockedEnemy.y - 38, '#a855f7', 34, true);
+            enemies.forEach(e => {
+              if (Math.abs(e.x - this.x) < 150) {
+                e.takeDamage(cheats.ohko ? 9999 : 28, this.facing * 14, -9, '#e879f9');
+                comboCount += 3;
+                comboTimer = 80;
+              }
+            });
+            this.lockedEnemy = null;
+          }
+        }
+      }
+
+      if (this.stateTimer === 0) {
+        this.state = (this.y < GROUND_Y) ? 'jump' : 'idle';
+        this.vx = 0;
+        this.lockedEnemy = null;
+      }
+    }
+
+    // 自由移動與出招控制
+    if (this.state === 'idle' || this.state === 'walk' || this.state === 'jump') {
+      if (input.sp && this.orbs >= 3) {
+        if (!cheats.inf) this.meter -= 300;
+        cutInTimer = 80;
+        cutInLineIdx = -1;
+        this.state = 'cutIn';
+        playTone(580, 'square', 0.3, 280);
+        return;
+      } else if (input.c && this.orbs >= 2) {
+        if (!cheats.inf) this.meter -= 200;
+        this.state = 'purpleHold';
+        this.stateTimer = 56;
+        this.vx = this.facing * 8;
+        this.lockedEnemy = null;
+        return;
+      } else if (input.b && this.orbs >= 1) {
+        if (!cheats.inf) this.meter -= 100;
+        this.state = 'slideCombo';
+        this.stateTimer = 26;
+        this.vx = this.facing * 9.5;
+        addSpeech(this, "You can't run!", 32);
+        playGasSound(1.1, 1.0);
+        return;
+      }
+
+      // 左右移動 + 留下 Skunk Trail 綠色氣體軌跡
+      if (input.left) {
+        this.vx = -4.0;
+        this.facing = -1;
+        if (this.y >= GROUND_Y) this.state = 'walk';
+        if (this.animFrame % 6 === 0) spawnTrailCloud(this.x + 14, this.y - 24);
+      } else if (input.right) {
+        this.vx = 4.0;
+        this.facing = 1;
+        if (this.y >= GROUND_Y) this.state = 'walk';
+        if (this.animFrame % 6 === 0) spawnTrailCloud(this.x - 14, this.y - 24);
+      } else {
+        this.vx = 0;
+        if (this.y >= GROUND_Y) this.state = 'idle';
+      }
+
+      // A 鍵：短按跳躍 / 空中長按噴氣滑翔
+      if (input.a && !this.aPressedPrev && this.y >= GROUND_Y) {
+        this.vy = -12.6;
+        this.state = 'jump';
+        playTone(280, 'sine', 0.14, 540);
+      } else if (input.a && this.y < GROUND_Y && this.vy > 0.5) {
+        // 空中長按噴氣浮空滑翔！
+        this.vy = 1.1;
+        if (this.animFrame % 4 === 0) {
+          spawnParticles(this.x, this.y - 16, '#bef264', 2, true);
+          playGasSound(0.7, 0.3);
+        }
+      }
+      this.aPressedPrev = input.a;
+    }
+
+    // 物理與平台碰撞
+    const prevY = this.y;
+    this.x += this.vx;
+    this.y += this.vy;
+
+    let onGround = false;
+    if (this.y >= GROUND_Y) {
+      this.y = GROUND_Y;
+      this.vy = 0;
+      onGround = true;
+    } else {
+      // 單向空中平台著陸判定
+      for (const plat of platforms) {
+        if (this.vy >= 0 && prevY <= plat.y + 6 && this.y >= plat.y && this.x >= plat.x && this.x <= plat.x + plat.w) {
+          this.y = plat.y;
+          this.vy = 0;
+          onGround = true;
+          break;
+        }
+      }
+    }
+
+    if (!onGround) {
+      this.vy += GRAVITY;
+    } else if (this.state === 'jump') {
+      this.state = 'idle';
+    }
+
+    this.x = Math.max(36, Math.min(stageWidth - 36, this.x));
+
+    // 過關旗幟判定
+    if (gameMode !== 'training' && this.x >= stageWidth - 90 && !stageClear) {
+      stageClear = true;
+      addSpeech(this, 'STAGE CLEAR!!', 90);
+      playTone(523, 'square', 0.4, 784);
+    }
+  }
+
+  draw(alpha = 1) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(Math.round(this.x - cameraX), Math.round(this.y));
+
+    if (alpha === 1) {
+      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 24, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    if (this.tintColor) {
+      ctx.filter = this.tintColor === 'pink'
+        ? 'hue-rotate(290deg) saturate(2.5)'
+        : 'hue-rotate(45deg) saturate(2.8) brightness(1.2)';
+    }
+
+    const isRear = (this.state === 'slideCombo' || this.state === 'purpleHold' || this.state === 'grabbed');
+    ctx.scale(isRear ? -this.facing : this.facing, 1);
+
+    if (this.state === 'slideCombo') {
+      ctx.translate(0, -30);
+      ctx.rotate(-0.6);
+      ctx.translate(0, 30);
+    }
+
+    const bob = (this.state === 'idle' || this.state === 'walk') ? Math.sin(this.animFrame * 0.22) * 2 : 0;
+    const legSwing = (this.state === 'walk') ? Math.sin(this.animFrame * 0.35) * 7 : 0;
+
+    // 紫色過膝長靴
+    ctx.fillStyle = '#7e22ce';
+    ctx.fillRect(-10 + legSwing, -30, 8, 30);
+    ctx.fillRect(3 - legSwing, -30, 8, 30);
+
+    // 白色緊身戰衣
+    ctx.fillStyle = '#f8fafc';
+    ctx.beginPath();
+    ctx.arc(0, -34 + bob, 13, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(-11, -58 + bob, 22, 24);
+
+    // 黃色飄動圍巾
+    ctx.fillStyle = '#facc15';
+    ctx.fillRect(-12, -59 + bob, 24, 6);
+    const scarfWave = Math.sin(this.animFrame * 0.3) * 4;
+    ctx.fillRect(-25, -57 + bob + scarfWave, 15, 8);
+
+    // 頭部
+    ctx.fillStyle = '#ffe0bd';
+    ctx.fillRect(-11, -78 + bob, 22, 20);
+
+    // 水藍色短髮
+    ctx.fillStyle = '#38bdf8';
+    ctx.beginPath();
+    ctx.arc(0, -73 + bob, 15, Math.PI * 0.85, Math.PI * 2.15);
+    ctx.fill();
+    ctx.fillRect(-14, -75 + bob, 28, 9);
+
+    // 黃色羽翼髮飾
+    ctx.fillStyle = '#fde047';
+    ctx.beginPath();
+    ctx.moveTo(-6, -74 + bob);
+    ctx.lineTo(-20, -86 + bob);
+    ctx.lineTo(-14, -70 + bob);
+    ctx.closePath();
+    ctx.fill();
+
+    // 眼睛與表情
+    if (isRear) {
+      ctx.strokeStyle = '#0369a1';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(3, -70 + bob); ctx.lineTo(7, -67 + bob); ctx.lineTo(3, -64 + bob);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = '#0284c7';
+      ctx.fillRect(4, -69 + bob, 4, 5);
+    }
+
+    ctx.fillStyle = '#ffe0bd';
+    ctx.fillRect(-4, -52 + bob, 14, 7);
+
+    ctx.restore();
+  }
+}
+
+function spawnTrailCloud(x, y) {
+  trailClouds.push({ x, y, radius: 18, life: 85 });
+}
+
+// 敵人類別（小兵 / 銀髮紫霧菁英 / 松鼠娘四人小隊 / 水手服菁英 / 銀紫長髮大 Boss）
+class Enemy {
+  constructor(x, type) {
+    this.x = x;
+    this.y = GROUND_Y;
+    this.vx = 0;
+    this.vy = 0;
+    this.facing = -1;
+    this.type = type; // 'maid', 'silver', 'squirrel4', 'sailor', 'priestess'
+    this.animFrame = 0;
+    this.state = 'idle';
+    this.stateTimer = 0;
+    this.hitCooldown = 0;
+    this.stunTimer = 0;
+    this.tintColor = null;
+    this.aiCooldown = 30;
+
+    const stats = {
+      maid:      { hp: 28,  name: '貓耳女僕兵' },
+      silver:    { hp: 65,  name: '銀髮藍衣菁英' },
+      squirrel4: { hp: 85,  name: '松鼠娘四人小隊' },
+      sailor:    { hp: 110, name: '水手服菁英' },
+      priestess: { hp: 220, name: '銀紫長髮大Boss' }
+    };
+    this.hp = stats[type].hp;
+    this.maxHp = stats[type].hp;
+    this.name = stats[type].name;
+  }
+
+  takeDamage(dmg, pushX, launchY, tint = null) {
+    this.hp -= dmg;
+    this.vx = pushX;
+    if (launchY) this.vy = launchY;
+    this.state = 'hurt';
+    this.stateTimer = 18;
+    if (tint) this.tintColor = tint;
+    player.meter = Math.min(500, player.meter + 35);
+    playTone(135, 'sawtooth', 0.12, 45);
+    spawnParticles(this.x, this.y - 42, tint || '#fde047', 8, false);
+  }
+
+  update() {
+    this.animFrame++;
+    if (this.hitCooldown > 0) this.hitCooldown--;
+    if (this.stunTimer > 0) {
+      this.stunTimer--;
+      return;
+    }
+
+    // 訓練場自動回血復活
+    if (this.hp <= 0) {
+      if (gameMode === 'training') {
+        this.hp = this.maxHp;
+        this.tintColor = null;
+        this.state = 'idle';
+        addSpeech(this, 'RESET!', 25);
+      } else {
+        // 掉落補血與氣力珠道具
+        items.push({ x: this.x, y: this.y - 20, type: Math.random() < 0.5 ? 'burger' : 'orb' });
+        this.dead = true;
+        return;
+      }
+    }
+
+    if (this.state === 'locked') {
+      return;
+    }
+
+    // 銀髮藍衣菁英：單體背後鎖定抖動蓄力 + 紫霧爆（影片 1）
+    if (this.state === 'grabHold') {
+      this.stateTimer--;
+      player.x = this.x;
+      if (this.stateTimer % 4 === 0) {
+        spawnParticles(this.x, this.y - 45, '#f472b6', 2, false);
+      }
+      if (this.stateTimer === 1) {
+        screenShake = 14;
+        playGasSound(2.0, 1.4);
+        spawnParticles(this.x, this.y - 38, '#a855f7', 30, true);
+        if (!cheats.god) player.hp = Math.max(1, player.hp - 18);
+        player.state = 'idle';
+        player.grabbedBy = null;
+        player.vy = -8;
+        player.vx = this.facing * 9;
+        player.tintColor = 'pink';
+        player.tintTimer = 150;
+        this.state = 'idle';
+      }
+      return;
+    }
+
+    // 松鼠娘四人小隊：四面包夾 + 全螢幕金黃閃光大爆炸（影片 2）
+    if (this.state === 'squirrelSquad') {
+      this.stateTimer--;
+      player.x = this.x;
+      if (this.stateTimer % 5 === 0) {
+        spawnParticles(this.x, this.y - 32, '#bef264', 4, true);
+      }
+      if (this.stateTimer === 1) {
+        screenShake = 18;
+        flashOverlay = 16;
+        flashColor = '#fde047';
+        playGasSound(2.4, 1.6);
+        spawnParticles(this.x, this.y - 40, '#fde047', 36, true);
+        if (!cheats.god) player.hp = Math.max(1, player.hp - 24);
+        player.state = 'idle';
+        player.grabbedBy = null;
+        player.vy = -10;
+        player.vx = this.facing * 12;
+        player.tintColor = 'yellow';
+        player.tintTimer = 150;
+        this.state = 'idle';
+      }
+      return;
+    }
+
+    // 銀紫長髮大 Boss："つかまえます" 終極拘束超必殺（最新影片）
+    if (this.state === 'bossGrab') {
+      this.stateTimer--;
+      player.x = this.x;
+      if (this.stateTimer === 55) addSpeech(this, 'つかまえます!', 35);
+      if (this.stateTimer === 30) addSpeech(this, '奥の手です…みなさん!', 35);
+      if (this.stateTimer % 4 === 0) {
+        spawnParticles(this.x, this.y - 34, '#a3e635', 4, true);
+        if (!cheats.god) player.hp = Math.max(1, player.hp - 2);
+      }
+      if (this.stateTimer === 1) {
+        screenShake = 16;
+        playGasSound(2.2, 1.5);
+        player.state = 'idle';
+        player.grabbedBy = null;
+        player.vy = -9;
+        player.vx = this.facing * 11;
+        this.state = 'idle';
+      }
+      return;
+    }
+
+    if (this.stateTimer > 0) {
+      this.stateTimer--;
+      if (this.stateTimer === 0) {
+        this.state = 'idle';
+        this.vx = 0;
+      }
+    }
+
+    // AI 行為邏輯
+    const dist = player.x - this.x;
+    const absDist = Math.abs(dist);
+    if (this.state === 'idle' || this.state === 'walk') {
+      this.facing = dist >= 0 ? 1 : -1;
+
+      if (gameMode === 'training' && cheats.trainAI === 'idle') {
+        this.vx = 0;
+        this.state = 'idle';
+      } else if (absDist < 380 && player.state !== 'grabbed' && cutInTimer === 0) {
+        if (this.aiCooldown > 0) this.aiCooldown--;
+
+        // 拘束技觸發條件（Hard 模式、訓練場進攻模式、或大 Boss）
+        const allowGrab = (gameMode === 'hard' || gameMode === 'training' || this.type === 'priestess');
+
+        if (allowGrab && absDist < 48 && this.aiCooldown === 0 && Math.random() < 0.08) {
+          mashCount = 0;
+          player.state = 'grabbed';
+          player.grabbedBy = this;
+          this.vx = 0;
+          if (this.type === 'squirrel4') {
+            this.state = 'squirrelSquad';
+            this.stateTimer = 75;
+            addSpeech(this, 'みんなで一斉に～!!', 45);
+          } else if (this.type === 'priestess') {
+            this.state = 'bossGrab';
+            this.stateTimer = 75;
+          } else {
+            this.state = 'grabHold';
+            this.stateTimer = 70;
+            addSpeech(this, 'ぷぷぷ～と いっきまぁす!', 40);
+          }
+          this.aiCooldown = 140;
+        } else if (this.type === 'sailor' && absDist < 160 && this.aiCooldown === 0 && Math.random() < 0.05) {
+          // 水手服菁英："Let's go!" 殘影衝刺
+          this.state = 'dash';
+          this.stateTimer = 20;
+          this.vx = this.facing * 7.5;
+          addSpeech(this, "Let's go!", 32);
+          this.aiCooldown = 80;
+        } else if (absDist > 44) {
+          this.vx = this.facing * (this.type === 'maid' ? 2.4 : 2.1);
+          this.state = 'walk';
+        } else {
+          this.vx = 0;
+          this.state = 'idle';
+          if (this.aiCooldown === 0) {
+            if (!cheats.god) player.hp = Math.max(1, player.hp - 4);
+            player.vx = this.facing * 4;
+            this.aiCooldown = 55;
+          }
+        }
+      }
+    }
+
+    if (this.state === 'dash') {
+      addAfterimage(this);
+      if (absDist < 46 && player.state !== 'grabbed') {
+        if (!cheats.god) player.hp = Math.max(1, player.hp - 6);
+        player.vx = this.facing * 7;
+        this.state = 'idle';
+      }
+    }
+
+    this.x += this.vx;
+    this.y += this.vy;
+    if (this.y < GROUND_Y) {
+      this.vy += GRAVITY;
+    } else {
+      this.y = GROUND_Y;
+      this.vy = 0;
+    }
+    this.x = Math.max(40, Math.min(stageWidth - 40, this.x));
+  }
+
+  draw(alpha = 1) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(Math.round(this.x - cameraX), Math.round(this.y));
+
+    if (alpha === 1 && this.hp > 0) {
+      // 頭頂小血條
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(-20, -94, 40, 5);
+      ctx.fillStyle = '#ef4444';
+      ctx.fillRect(-19, -93, 38 * Math.max(0, this.hp / this.maxHp), 3);
+    }
+
+    if (this.stunTimer > 0) {
+      ctx.filter = 'hue-rotate(85deg) saturate(2.2)';
+    }
+
+    // 若是松鼠娘四人小隊發動合體大招，額外畫出左右與上方包夾的三隻分身！
+    if (this.state === 'squirrelSquad') {
+      this.drawSingleModel(-24, 0, 1, '#1e293b');  // 左側黑髮松鼠娘
+      this.drawSingleModel(24, 0, -1, '#dc2626');  // 右側紅髮松鼠娘
+      this.drawSingleModel(0, -46, -1, '#facc15'); // 上方壓制金髮松鼠娘
+      this.drawSingleModel(14, 0, -1, '#16a34a');  // 右側綠髮松鼠娘
+      ctx.restore();
+      return;
+    }
+
+    ctx.scale(this.facing, 1);
+    const bob = Math.sin(this.animFrame * 0.2) * 2;
+
+    if (this.type === 'maid') {
+      // 貓耳女僕小兵
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(-11, -56 + bob, 22, 34);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(-7, -50 + bob, 14, 24);
+      ctx.fillStyle = '#ffe0bd';
+      ctx.fillRect(-10, -75 + bob, 20, 19);
+      ctx.fillStyle = '#991b1b';
+      ctx.fillRect(-12, -78 + bob, 24, 8);
+      // 貓耳
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(-9, -84 + bob, 6, 6);
+      ctx.fillRect(3, -84 + bob, 6, 6);
+    } else if (this.type === 'silver') {
+      // 銀髮藍衣菁英
+      ctx.fillStyle = '#2563eb';
+      ctx.fillRect(-11, -56 + bob, 22, 34);
+      ctx.fillStyle = '#ffe0bd';
+      ctx.fillRect(-10, -75 + bob, 20, 19);
+      ctx.fillStyle = '#e2e8f0';
+      ctx.fillRect(-13, -78 + bob, 26, 26);
+    } else if (this.type === 'squirrel4') {
+      this.drawSingleModel(0, 0, 1, '#991b1b');
+    } else if (this.type === 'sailor') {
+      // 粉紅短髮水手服菁英
+      ctx.fillStyle = '#e11d48';
+      ctx.fillRect(-12, -40 + bob, 24, 12);
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(-11, -58 + bob, 22, 18);
+      ctx.fillStyle = '#ffe0bd';
+      ctx.fillRect(-10, -76 + bob, 20, 18);
+      ctx.fillStyle = '#ec4899';
+      ctx.beginPath();
+      ctx.arc(0, -72 + bob, 15, Math.PI * 0.85, Math.PI * 2.15);
+      ctx.fill();
+    } else if (this.type === 'priestess') {
+      // 銀紫長髮大 Boss
+      ctx.fillStyle = '#c4b5fd';
+      ctx.fillRect(-16, -80 + bob, 32, 62);
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(-12, -58 + bob, 24, 24);
+      ctx.fillStyle = '#6d28d9';
+      ctx.fillRect(-14, -36 + bob, 28, 34);
+      ctx.fillStyle = '#ffe0bd';
+      ctx.fillRect(-10, -76 + bob, 20, 18);
+      ctx.fillStyle = '#ef4444';
+      ctx.fillRect(4, -68 + bob, 4, 4);
+    }
+
+    ctx.restore();
+  }
+
+  drawSingleModel(ox, oy, dir, hairColor) {
+    ctx.save();
+    ctx.translate(ox, oy);
+    ctx.scale(dir, 1);
+    // 超蓬鬆松鼠大尾巴
+    ctx.fillStyle = hairColor;
+    ctx.beginPath();
+    ctx.arc(-18, -32, 16, 0, Math.PI * 2);
+    ctx.fill();
+    // 紫色緊身衣
+    ctx.fillStyle = '#7e22ce';
+    ctx.fillRect(-10, -54, 20, 32);
+    ctx.fillStyle = '#ffe0bd';
+    ctx.fillRect(-9, -72, 18, 18);
+    ctx.fillStyle = hairColor;
+    ctx.fillRect(-11, -76, 22, 10);
+    ctx.restore();
+  }
+}
+
+let player = null;
+
+function spawnEnemyAtPlayer(type) {
+  if (!player) return;
+  const spawnX = Math.min(stageWidth - 60, player.x + player.facing * 120);
+  enemies.push(new Enemy(spawnX, type));
+  document.getElementById('debug-panel').style.display = 'none';
+}
+
+function startGame(mode) {
+  gameMode = mode;
+  stageClear = false;
+  particles = [];
+  trailClouds = [];
+  afterimages = [];
+  speechBubbles = [];
+  items = [];
+  enemies = [];
+  platforms = [];
+
+  document.getElementById('title-screen').style.display = 'none';
+  player = new Miranda();
+
+  if (mode === 'training') {
+    stageWidth = 960;
+    cheats.god = true;
+    cheats.inf = true;
+    player.meter = 500;
+    enemies.push(new Enemy(380, 'squirrel4'));
+  } else {
+    stageWidth = 3000;
+    cheats.god = false;
+    cheats.inf = false;
+    // 空中平台配置
+    platforms = [
+      { x: 350, y: 215, w: 140 },
+      { x: 680, y: 190, w: 160 },
+      { x: 1120, y: 210, w: 150 },
+      { x: 1750, y: 195, w: 170 },
+      { x: 2180, y: 210, w: 150 }
+    ];
+    // 補給漢堡與氣力珠
+    items = [
+      { x: 410, y: 190, type: 'orb' },
+      { x: 750, y: 165, type: 'burger' },
+      { x: 1190, y: 185, type: 'orb' },
+      { x: 1820, y: 170, type: 'burger' },
+      { x: 2240, y: 185, type: 'orb' }
+    ];
+    // 關卡敵人波次配置
+    enemies.push(new Enemy(480, 'maid'));
+    enemies.push(new Enemy(620, 'maid'));
+    enemies.push(new Enemy(920, 'silver'));
+    enemies.push(new Enemy(1450, 'sailor')); // 中段水手服菁英
+    enemies.push(new Enemy(1960, 'squirrel4')); // 松鼠娘四人小隊
+    enemies.push(new Enemy(2680, 'priestess')); // 關底銀紫長髮大 Boss
+  }
+  updateDebugUI();
+}
+
+function drawBackground() {
+  // 日式寺廟前庭捲軸背景
+  const sky = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
+  sky.addColorStop(0, '#7dd3fc');
+  sky.addColorStop(1, '#e0f2fe');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, canvas.width, GROUND_Y);
+
+  // 視差建築
+  const bgOffset = -(cameraX * 0.4) % 480;
+  for (let bx = bgOffset - 480; bx < canvas.width + 480; bx += 480) {
+    ctx.fillStyle = '#334155';
+    ctx.beginPath();
+    ctx.moveTo(bx + 60, 145);
+    ctx.lineTo(bx + 240, 75);
+    ctx.lineTo(bx + 420, 145);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#451a03';
+    ctx.fillRect(bx + 90, 145, 300, GROUND_Y - 145);
+    ctx.fillStyle = '#fef3c7';
+    for (let wx = 115; wx < 360; wx += 55) {
+      ctx.fillRect(bx + wx, 165, 34, 90);
+    }
+  }
+
+  // 石板地面
+  ctx.fillStyle = '#475569';
+  ctx.fillRect(0, GROUND_Y, canvas.width, canvas.height - GROUND_Y);
+
+  // 空中平台繪製
+  ctx.fillStyle = '#92400e';
+  ctx.strokeStyle = '#fde047';
+  ctx.lineWidth = 2;
+  for (const plat of platforms) {
+    const px = plat.x - cameraX;
+    if (px + plat.w >= 0 && px <= canvas.width) {
+      ctx.fillRect(px, plat.y, plat.w, 12);
+      ctx.strokeRect(px, plat.y, plat.w, 12);
+    }
+  }
+
+  // 終點旗幟
+  if (gameMode !== 'training') {
+    const fx = (stageWidth - 90) - cameraX;
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(fx, GROUND_Y - 110, 6, 110);
+    ctx.fillStyle = '#f43f5e';
+    ctx.beginPath();
+    ctx.moveTo(fx + 6, GROUND_Y - 110);
+    ctx.lineTo(fx + 52, GROUND_Y - 92);
+    ctx.lineTo(fx + 6, GROUND_Y - 74);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+function drawHUD() {
+  if (!player) return;
+
+  // 左上 Miranda 頭像與血條
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(12, 10, 38, 38);
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(12, 10, 38, 38);
+  ctx.fillStyle = '#38bdf8';
+  ctx.fillRect(17, 15, 28, 22);
+  ctx.fillStyle = '#ffe0bd';
+  ctx.fillRect(20, 22, 22, 20);
+
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(54, 14, 210, 16);
+  const hpW = (player.hp / player.maxHp) * 206;
+  ctx.fillStyle = player.hp < 30 ? '#ef4444' : '#38bdf8';
+  ctx.fillRect(56, 16, hpW, 12);
+
+  // 氣力珠指示器 (Orbs)
+  ctx.fillStyle = '#fde047';
+  ctx.font = 'bold 13px Arial';
+  ctx.textAlign = 'left';
+  ctx.fillText(`ORBS: ${player.orbs} / 5`, 56, 44);
+  for (let i = 0; i < 5; i++) {
+    ctx.fillStyle = i < player.orbs ? '#fde047' : '#334155';
+    ctx.beginPath();
+    ctx.arc(146 + i * 16, 39, 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // 右上模式與進度提示
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 12px Arial';
+  ctx.textAlign = 'right';
+  const modeLabel = gameMode === 'training' ? 'TRAINING MODE' : `${gameMode.toUpperCase()} | 進度 ${Math.min(100, Math.floor((player.x / (stageWidth - 90)) * 100))}%`;
+  ctx.fillText(modeLabel, canvas.width - 14, 26);
+
+  // 被拘束時顯示連打掙脫提示！
+  if (player.state === 'grabbed') {
+    ctx.fillStyle = 'rgba(0,0,0,0.65)';
+    ctx.fillRect(170, 95, 300, 46);
+    ctx.strokeStyle = '#f43f5e';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(170, 95, 300, 46);
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(`⚡ 快速連按螢幕掙脫！ (${mashCount}/10)`, 320, 124);
+  }
+
+  // 連擊數
+  if (comboTimer > 0 && comboCount >= 2) {
+    comboTimer--;
+    ctx.font = 'italic bold 24px Arial';
+    ctx.fillStyle = '#fde047';
+    ctx.textAlign = 'left';
+    ctx.fillText(`${comboCount} Hit!`, 24, 96);
+  }
+
+  // 3 珠 SP 全螢幕漫畫大特寫 Cut-in 演出（第二段影片風格）
+  if (cutInTimer > 0) {
+    ctx.fillStyle = 'rgba(10, 10, 20, 0.85)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // 繪製佔據半個畫面的 Miranda 漫畫特寫插畫
+    ctx.save();
+    ctx.translate(320, 230);
+    ctx.scale(3.6, 3.6);
+    ctx.fillStyle = '#38bdf8';
+    ctx.beginPath();
+    ctx.arc(0, -10, 28, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffe0bd';
+    ctx.fillRect(-18, -14, 36, 30);
+    ctx.fillStyle = '#0284c7';
+    ctx.fillRect(-10, -4, 6, 8);
+    ctx.fillRect(6, -4, 6, 8);
+    ctx.fillStyle = '#fde047';
+    ctx.beginPath();
+    ctx.moveTo(-16, -18);
+    ctx.lineTo(-34, -32);
+    ctx.lineTo(-24, -10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    const lines = ['「愛と」', '「正義と」', '「幸せの」', '「ロイヤルはーと！！」'];
+    ctx.fillStyle = '#f472b6';
+    ctx.font = 'bold 28px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(lines[Math.min(3, Math.max(0, cutInLineIdx))], 320, 68);
+  }
+
+  if (stageClear) {
+    ctx.fillStyle = 'rgba(0,0,0,0.65)';
+    ctx.fillRect(0, 130, canvas.width, 84);
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 34px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('STAGE CLEAR!!', 320, 174);
+    ctx.fillStyle = '#fff';
+    ctx.font = '14px Arial';
+    ctx.fillText('點擊上方 [🔧 測試/召喚選單] 可返回主選單或繼續測試', 320, 198);
+  }
+}
+
+function drawSpeechBubbles() {
+  for (let i = speechBubbles.length - 1; i >= 0; i--) {
+    const b = speechBubbles[i];
+    b.life--;
+    if (b.life <= 0) {
+      speechBubbles.splice(i, 1);
+      continue;
+    }
+    const bx = Math.max(75, Math.min(canvas.width - 75, b.owner.x - cameraX));
+    const by = b.owner.y - 102;
+    const w = Math.max(88, b.text.length * 8 + 24);
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(226, 232, 240, 0.94)';
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(bx, by, w / 2, 16, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(b.text, bx, by + 4);
+    ctx.restore();
+  }
+}
+
+function loop() {
+  requestAnimationFrame(loop);
+  if (!player) return;
+
+  ctx.save();
+  if (screenShake > 0) {
+    ctx.translate((Math.random() - 0.5) * screenShake, (Math.random() - 0.5) * screenShake);
+    screenShake--;
+  }
+
+  // 鏡頭平滑跟隨 Miranda
+  const targetCam = Math.max(0, Math.min(stageWidth - canvas.width, player.x - 220));
+  cameraX += (targetCam - cameraX) * 0.14;
+
+  drawBackground();
+
+  // 更新並繪製 Skunk Trail 綠色氣體軌跡（踩到的敵人會暈眩減速！）
+  for (let i = trailClouds.length - 1; i >= 0; i--) {
+    const tc = trailClouds[i];
+    tc.life--;
+    ctx.fillStyle = `rgba(163, 230, 53, ${Math.min(0.55, tc.life / 90)})`;
+    ctx.beginPath();
+    ctx.arc(tc.x - cameraX, tc.y, tc.radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    enemies.forEach(e => {
+      if (Math.abs(e.x - tc.x) < tc.radius + 12 && Math.abs(e.y - tc.y) < 35 && e.stunTimer === 0) {
+        e.stunTimer = 45;
+        addSpeech(e, 'COUGH!!', 25);
+      }
+    });
+    if (tc.life <= 0) trailClouds.splice(i, 1);
+  }
+
+  // 道具補給更新
+  for (let i = items.length - 1; i >= 0; i--) {
+    const it = items[i];
+    const ix = it.x - cameraX;
+    ctx.fillStyle = it.type === 'burger' ? '#f97316' : '#fde047';
+    ctx.beginPath();
+    ctx.arc(ix, it.y, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 10px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(it.type === 'burger' ? 'HP' : 'SP', ix, it.y + 3);
+
+    if (Math.abs(player.x - it.x) < 30 && Math.abs(player.y - it.y) < 45) {
+      if (it.type === 'burger') player.hp = Math.min(player.maxHp, player.hp + 35);
+      else player.meter = Math.min(500, player.meter + 100);
+      playTone(660, 'sine', 0.15, 880);
+      items.splice(i, 1);
+    }
+  }
+
+  // 殘影繪製
+  for (let i = afterimages.length - 1; i >= 0; i--) {
+    const ai = afterimages[i];
+    ai.life--;
+    const a = (ai.life / ai.maxLife) * 0.4;
+    if (ai.type === 'miranda') {
+      const sx = player.x, sy = player.y, ss = player.state;
+      player.x = ai.x; player.y = ai.y; player.state = ai.state;
+      player.draw(a);
+      player.x = sx; player.y = sy; player.state = ss;
+    }
+    if (ai.life <= 0) afterimages.splice(i, 1);
+  }
+
+  player.update();
+
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    enemies[i].update();
+    if (enemies[i].dead) {
+      enemies.splice(i, 1);
+    } else {
+      enemies[i].draw();
+    }
+  }
+
+  player.draw();
+
+  // 粒子渲染
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const pt = particles[i];
+    pt.x += pt.vx;
+    pt.y += pt.vy;
+    pt.life--;
+    ctx.fillStyle = pt.color;
+    if (pt.isCloud) {
+      ctx.globalAlpha = Math.max(0, pt.life / 28);
+      ctx.beginPath();
+      ctx.arc(pt.x - cameraX, pt.y, pt.size * 0.65, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    } else {
+      ctx.fillRect(pt.x - cameraX, pt.y, pt.size, pt.size);
+    }
+    if (pt.life <= 0) particles.splice(i, 1);
+  }
+
+  drawSpeechBubbles();
+  drawHUD();
+
+  if (flashOverlay > 0) {
+    ctx.fillStyle = flashColor;
+    ctx.globalAlpha = flashOverlay / 18;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.globalAlpha = 1;
+    flashOverlay--;
+  }
+
+  ctx.restore();
+}
+
+loop();
+</script>
+</body>
+</html>
