@@ -458,9 +458,10 @@
         if (this.untargetable) {
           ctx.globalAlpha = 0.85; // 無法被攻擊的姐妹帶點半透明幻影感
         }
-
         if (img && img.complete && img.naturalWidth > 0) {
-          ctx.drawImage(img, -this.width / 2, -this.height, this.width, this.height);
+          let drawH = this.height;
+          let drawW = (img.naturalWidth / img.naturalHeight) * drawH;
+          ctx.drawImage(img, -drawW / 2, -drawH, drawW, drawH);
         } else {
           ctx.fillStyle = this.isPoisoned ? '#48bb78' : this.color;
           ctx.fillRect(-this.width / 2, -this.height, this.width, this.height);
