@@ -1,0 +1,1166 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>2.5D 橫向卷軸動作遊戲</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+      touch-action: none;
+    }
+    body {
+      margin: 0;
+      background-color: #1a202c;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      overflow: hidden;
+      color: white;
+      font-family: "Microsoft JhengHei", sans-serif;
+    }
+    #game-wrapper {
+      position: relative;
+      width: 100vw;
+      max-width: 900px;
+      aspect-ratio: 900 / 500;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+      background-color: #2d3748;
+      border: 3px solid #718096;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+      display: block;
+    }
+
+    /* 手機/平板虛擬觸控按鍵層 */
+    #touch-controls {
+      position: fixed;
+      bottom: 20px;
+      left: 0;
+      right: 0;
+      width: 100%;
+      height: 165px;
+      padding: 0 25px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      pointer-events: none;
+      z-index: 5000;
+    }
+    .dpad {
+      position: relative;
+      width: 150px;
+      height: 150px;
+      pointer-events: auto;
+    }
+    .dpad-btn {
+      position: absolute;
+      width: 50px;
+      height: 50px;
+      background: rgba(255, 255, 255, 0.25);
+      border: 2px solid rgba(255, 255, 255, 0.5);
+      border-radius: 12px;
+      color: white;
+      font-size: 20px;
+      font-weight: bold;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .dpad-btn:active, .dpad-btn.active {
+      background: rgba(251, 211, 141, 0.65);
+      transform: scale(0.94);
+    }
+    #btn-up    { top: 0; left: 50px; }
+    #btn-down  { bottom: 0; left: 50px; }
+    #btn-left  { top: 50px; left: 0; }
+    #btn-right { top: 50px; right: 0; }
+
+    .action-pad {
+      position: relative;
+      width: 210px;
+      height: 165px;
+      pointer-events: auto;
+    }
+    .act-btn {
+      position: absolute;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.6);
+      color: white;
+      font-weight: bold;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+    }
+    .act-btn:active, .act-btn.active {
+      transform: scale(0.92);
+      filter: brightness(1.3);
+    }
+    #btn-attack { width: 68px; height: 68px; bottom: 5px; right: 5px; background: rgba(229, 62, 62, 0.65); font-size: 16px; }
+    #btn-jump   { width: 54px; height: 54px; bottom: 85px; right: 10px; background: rgba(66, 153, 225, 0.65); font-size: 14px; }
+    #btn-skill1 { width: 54px; height: 54px; bottom: 10px; right: 85px; background: rgba(214, 158, 46, 0.65); font-size: 13px; }
+    #btn-skill2 { width: 54px; height: 54px; bottom: 72px; right: 76px; background: rgba(56, 161, 105, 0.65); font-size: 13px; }
+    #btn-ult    { width: 54px; height: 54px; bottom: 45px; right: 142px; background: rgba(213, 63, 140, 0.7); font-size: 13px; }
+  </style>
+</head>
+<body>
+
+  <!-- 1. 遊戲主頁面 -->
+  <div id="main-menu" style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(26,32,44,0.96); display:flex; flex-direction:column; justify-content:center; align-items:center; z-index:9999;">
+    <h1 style="font-size:32px; color:#fbd38d; margin-bottom:25px;">2.5D 橫向動作遊戲</h1>
+    <button onclick="startGame()" style="padding:14px 40px; font-size:20px; margin:8px; border:none; border-radius:8px; background:#3182ce; color:white; font-weight:bold; cursor:pointer;">開始遊戲</button>
+    <button onclick="toggleSettings()" style="padding:12px 35px; font-size:18px; margin:8px; border:none; border-radius:8px; background:#4a5568; color:white; cursor:pointer;">測試與設定</button>
+  </div>
+
+  <!-- 2. 右上角設定按鈕與測試面板 -->
+  <button onclick="toggleSettings()" style="position:fixed; top:15px; right:15px; z-index:9998; padding:8px 14px; background:rgba(0,0,0,0.75); color:white; border:1px solid #cbd5e0; border-radius:6px; font-size:14px; cursor:pointer;">⚙️ 設定 / 測試</button>
+
+  <div id="settings-panel" style="display:none; position:fixed; top:55px; right:15px; width:250px; background:rgba(45,55,72,0.96); border:2px solid #cbd5e0; border-radius:10px; padding:15px; z-index:10000; font-size:14px; color:white;">
+    <strong>🛠️ 開發者測試面板</strong>
+    <hr style="border-color:#718096; margin:8px 0;">
+    <label style="cursor:pointer;"><input type="checkbox" id="chk-godmode"> 無限血量 (無敵)</label><br>
+    <label style="cursor:pointer;"><input type="checkbox" id="chk-inf-mp" checked> 無限氣量 (技能無消耗)</label>
+    
+    <div style="margin-top:10px;">跳轉關卡：
+      <select id="sel-stage" onchange="jumpToStage(this.value)" style="width:100%; margin-top:4px; padding:5px;">
+        <option value="0">第 1 關 (基礎練手)</option>
+        <option value="1">第 2 關 (菁英初現)</option>
+        <option value="2">第 3 關 (臭鼬王 BOSS)</option>
+        <option value="3">第 4 關 (高難混編)</option>
+        <option value="4">第 5 關 (最終 BOSS)</option>
+      </select>
+    </div>
+
+    <div style="margin-top:10px;">召喚特定敵人：
+      <select id="sel-enemy" style="width:100%; margin-top:4px; padding:5px;">
+        <option value="Minion">普通小兵</option>
+        <option value="DemonElite">惡魔菁英 (防空/拉拽)</option>
+        <option value="LongReachElite">長距菁英 (倒地追擊)</option>
+        <option value="TeleportElite">瞬移菁英 (延遲瞬抓)</option>
+        <option value="SkunkKingBoss">BOSS：臭鼬王</option>
+        <option value="FinalBoss">最終 BOSS</option>
+      </select>
+      <button onclick="spawnTestEnemy()" style="width:100%; margin-top:6px; padding:6px; background:#e53e3e; color:white; border:none; border-radius:4px; cursor:pointer;">立即召喚</button>
+    </div>
+    <button onclick="toggleSettings()" style="width:100%; margin-top:10px; padding:6px; background:#718096; color:white; border:none; border-radius:4px; cursor:pointer;">關閉面板</button>
+  </div>
+
+  <!-- 3. 遊戲畫布 -->
+  <div id="game-wrapper">
+    <canvas id="gameCanvas" width="900" height="500"></canvas>
+  </div>
+
+  <!-- 4. 手機/平板虛擬觸控按鍵 -->
+  <div id="touch-controls">
+    <div class="dpad">
+      <div class="dpad-btn" id="btn-up" data-key="ArrowUp">▲</div>
+      <div class="dpad-btn" id="btn-down" data-key="ArrowDown">▼</div>
+      <div class="dpad-btn" id="btn-left" data-key="ArrowLeft">◀</div>
+      <div class="dpad-btn" id="btn-right" data-key="ArrowRight">▶</div>
+    </div>
+
+    <div class="action-pad">
+      <div class="act-btn" id="btn-ult" data-key="KeyV">大招<small>魅惑</small></div>
+      <div class="act-btn" id="btn-skill2" data-key="KeyC">2技<small>突進</small></div>
+      <div class="act-btn" id="btn-skill1" data-key="KeyX">1技<small>群控</small></div>
+      <div class="act-btn" id="btn-jump" data-key="Space">跳躍</div>
+      <div class="act-btn" id="btn-attack" data-key="KeyZ">普攻<small>抓技</small></div>
+    </div>
+  </div>
+
+  <script>
+    // ==========================================
+    // 1. 遊戲基礎設定與介面控制
+    // ==========================================
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const FLOOR_MIN_Y = 280;
+    const FLOOR_MAX_Y = 470;
+    const GRAVITY = 0.65;
+
+    let isGameStarted = false;
+
+    function startGame() {
+      document.getElementById('main-menu').style.display = 'none';
+      isGameStarted = true;
+    }
+
+    function toggleSettings() {
+      const panel = document.getElementById('settings-panel');
+      panel.style.display = (panel.style.display === 'block') ? 'none' : 'block';
+    }
+
+    function jumpToStage(stageIdx) {
+      currentStage = parseInt(stageIdx);
+      stageClearTimer = 0;
+      player.x = 150;
+      player.hp = player.maxHp;
+      player.mp = player.maxMp;
+      loadStage(currentStage);
+      startGame();
+    }
+
+    function spawnTestEnemy() {
+      const type = document.getElementById('sel-enemy').value;
+      enemies.push(new Enemy(player.x + 180, player.y, type));
+    }
+
+    const keys = {};
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    document.querySelectorAll('[data-key]').forEach(btn => {
+      const keyCode = btn.getAttribute('data-key');
+      const press = (e) => { e.preventDefault(); keys[keyCode] = true; btn.classList.add('active'); };
+      const release = (e) => { e.preventDefault(); keys[keyCode] = false; btn.classList.remove('active'); };
+      btn.addEventListener('touchstart', press, { passive: false });
+      btn.addEventListener('touchend', release, { passive: false });
+      btn.addEventListener('touchcancel', release, { passive: false });
+      btn.addEventListener('mousedown', press);
+      btn.addEventListener('mouseup', release);
+      btn.addEventListener('mouseleave', release);
+    });
+
+    // ==========================================
+    // 2. 完整圖片素材管理員 (依需求精細命名)
+    // ==========================================
+    const ASSET_PATHS = {
+      player: {
+        idle:              ['images/player_idle.png'],
+        walk:              ['images/player_walk1.png', 'images/player_walk2.png'],
+        jump:              ['images/player_jump.png'],
+        grab_reach:        ['images/player_grab_reach.png'],       // 普攻(抓出的動作)
+        grab_hold:         ['images/player_grab_hold.png'],        // 普攻(拘束的動作)
+        air_grab_reach:    ['images/player_air_grab_reach.png'],   // 空中抓技(抓出)
+        air_grab_hold:     ['images/player_air_grab_hold.png'],    // 空中抓技(拘束)
+        skill1_ctrl:       ['images/player_skill1_ctrl.png'],      // 一技能(控制)
+        skill1_atk:        ['images/player_skill1_atk.png'],       // 一技能(攻擊)
+        skill2_dash:       ['images/player_skill2_dash.png'],      // 二技能(突進)
+        skill2_pin:        ['images/player_skill2_pin.png'],       // 二技能(壓制)
+        ult:               ['images/player_ult.png'],              // 大招
+        restrained:        ['images/player_restrained.png'],       // 被拘束
+        restrained_ground: ['images/player_restrained_ground.png'] // 被壓制拘束
+      },
+      Minion: {
+        idle:              ['images/minion_idle.png'],             // 移動
+        restrained:        ['images/minion_restrained.png'],       // 被拘束
+        restrained_ground: ['images/minion_restrained_ground.png'] // 被壓制拘束
+      },
+      DemonElite: {
+        idle:              ['images/demon_idle.png'],              // 移動
+        grab_reach:        ['images/demon_grab_reach.png'],        // 抓技
+        grab_hold:         ['images/demon_grab_hold.png'],         // 拘束主角
+        pull_reach:        ['images/demon_pull_reach.png'],        // 遠距拉曳
+        pull_hold:         ['images/demon_pull_hold.png'],         // 拉曳後拘束
+        restrained:        ['images/demon_restrained.png'],        // 被拘束
+        restrained_ground: ['images/demon_restrained_ground.png']  // 被地板拘束
+      },
+      LongReachElite: {
+        idle:              ['images/long_idle.png'],               // 移動
+        grab_long:         ['images/long_grab_long.png'],          // 抓技(長)
+        grab_hold:         ['images/long_grab_hold.png'],          // 拘束主角
+        ground_hold:       ['images/long_ground_hold.png'],        // 地板拘束
+        restrained:        ['images/long_restrained.png'],         // 被拘束
+        restrained_ground: ['images/long_restrained_ground.png']   // 被地板拘束
+      },
+      TeleportElite: {
+        idle:              ['images/tp_idle.png'],                 // 移動
+        tp_wait:           ['images/tp_wait.png'],                 // 瞬移拘束(等待約1秒)
+        tp_hold:           ['images/tp_hold.png'],                 // 瞬移拘束
+        grab_reach:        ['images/tp_grab_reach.png'],           // 抓技
+        restrained:        ['images/tp_restrained.png'],           // 被拘束
+        restrained_ground: ['images/tp_restrained_ground.png']     // 被地板拘束
+      },
+      SkunkKingBoss: {
+        idle:              ['images/boss_skunk_idle.png'],         // 移動
+        grab_hold:         ['images/boss_skunk_grab.png'],         // 抓技
+        aoe_gas:           ['images/boss_skunk_aoe.png'],          // 全場地面臭氣
+        half_hp_ult:       ['images/boss_skunk_ult.png'],          // 半血後大招
+        restrained:        ['images/boss_skunk_restrained.png'],   // 被拘束
+        restrained_ground: ['images/boss_skunk_restrained_ground.png'] // 被地板拘束
+      },
+      SkunkSister: {
+        idle:              ['images/sister_idle.png'],             // 移動
+        attack:            ['images/sister_attack.png']            // 攻擊
+      },
+      FinalBoss: {
+        idle:              ['images/boss_final_idle.png'],         // 移動
+        grab_hold:         ['images/boss_final_grab.png'],         // 抓技
+        mid_grab:          ['images/boss_final_mid_grab.png'],     // 特別中距離抓技
+        box_ult:           ['images/boss_final_box_ult.png'],      // 大招箱子拘束
+        restrained:        ['images/boss_final_restrained.png'],   // 被拘束
+        restrained_ground: ['images/boss_final_restrained_ground.png'] // 被地板拘束
+      },
+      effects: {
+        fx_player_atk:     ['images/fx_player_atk.png'],           // 主角普攻
+        fx_player_s1:      ['images/fx_player_s1.png'],            // 一技能
+        fx_player_s2:      ['images/fx_player_s2.png'],            // 二技能
+        fx_player_s3:      ['images/fx_player_s3.png'],            // 三技能(大招)
+        fx_fart_common:    ['images/fx_fart_common.png'],          // 通用fart特效
+        fx_demon_atk:      ['images/fx_demon_atk.png'],            // 惡魔菁英攻擊
+        fx_long_atk:       ['images/fx_long_atk.png'],             // 長距菁英攻擊
+        fx_tp_atk:         ['images/fx_tp_atk.png'],               // 瞬移菁英攻擊
+        fx_skunk_atk:      ['images/fx_skunk_atk.png'],            // 臭鼬王和姐妹攻擊
+        fx_final_atk:      ['images/fx_final_atk.png']             // final boss攻擊
+      }
+    };
+
+    const IMAGES = {};
+    function loadAssets(onComplete) {
+      let total = 0, loaded = 0;
+      for (let cat in ASSET_PATHS) {
+        IMAGES[cat] = {};
+        for (let state in ASSET_PATHS[cat]) total += ASSET_PATHS[cat][state].length;
+      }
+      if (total === 0) return onComplete();
+
+      for (let cat in ASSET_PATHS) {
+        for (let state in ASSET_PATHS[cat]) {
+          IMAGES[cat][state] = ASSET_PATHS[cat][state].map(src => {
+            const img = new Image();
+            img.src = src;
+            const checkDone = () => { loaded++; if (loaded >= total) onComplete(); };
+            img.onload = checkDone;
+            img.onerror = checkDone;
+            return img;
+          });
+        }
+      }
+    }
+
+    // ==========================================
+    // 3. 特效系統 (優先顯示專用特效，若無圖則嘗試通用fart圖，再無則顯示色塊)
+    // ==========================================
+    let effects = [];
+    class VisualEffect {
+      constructor(x, y, z, type, fallbackColor, radius, duration = 25, useCommonFartFallback = true) {
+        this.x = x; this.y = y; this.z = z;
+        this.type = type;
+        this.fallbackColor = fallbackColor;
+        this.radius = radius;
+        this.timer = duration;
+        this.maxTimer = duration;
+        this.useCommonFartFallback = useCommonFartFallback;
+      }
+      update() { this.timer--; }
+      draw(ctx) {
+        let renderY = this.y - this.z - 40;
+        let img = IMAGES.effects[this.type] ? IMAGES.effects[this.type][0] : null;
+        if ((!img || !img.complete || img.naturalWidth === 0) && this.useCommonFartFallback) {
+          img = IMAGES.effects['fx_fart_common'] ? IMAGES.effects['fx_fart_common'][0] : null;
+        }
+
+        if (img && img.complete && img.naturalWidth > 0) {
+          ctx.drawImage(img, this.x - this.radius, renderY - this.radius, this.radius * 2, this.radius * 2);
+        } else {
+          ctx.save();
+          ctx.globalAlpha = this.timer / this.maxTimer;
+          ctx.fillStyle = this.fallbackColor;
+          ctx.beginPath();
+          ctx.arc(this.x, renderY, this.radius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+    }
+
+    function spawnEffect(x, y, z, type, color, radius = 40, duration = 25, useCommonFart = true) {
+      effects.push(new VisualEffect(x, y, z, type, color, radius, duration, useCommonFart));
+    }
+
+    // ==========================================
+    // 4. 基礎角色類別
+    // ==========================================
+    class Entity {
+      constructor(x, y, width, height, color, category) {
+        this.x = x; this.y = y; this.z = 0;
+        this.vx = 0; this.vy = 0; this.vz = 0;
+        this.width = width; this.height = height;
+        this.color = color;
+        this.category = category;
+        this.facing = 1;
+        this.state = 'idle';
+        this.hp = 100; this.maxHp = 100;
+        this.untargetable = false; // 是否無法被攻擊(如臭鼬姐妹)
+        
+        this.animTimer = 0;
+        this.frameIndex = 0;
+        this.invincibleTimer = 0;
+        this.isPoisoned = false;
+        this.poisonTimer = 0;
+      }
+
+      applyPhysics() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.z += this.vz;
+
+        if (this.z > 0) this.vz -= GRAVITY;
+        else { this.z = 0; this.vz = 0; }
+
+        if (this.x < 30) this.x = 30;
+        if (this.x > canvas.width - 30) this.x = canvas.width - 30;
+        if (this.y < FLOOR_MIN_Y) this.y = FLOOR_MIN_Y;
+        if (this.y > FLOOR_MAX_Y) this.y = FLOOR_MAX_Y;
+
+        if (this.isPoisoned) {
+          this.poisonTimer--;
+          if (this.poisonTimer % 30 === 0) this.hp -= 3;
+          if (this.poisonTimer <= 0) this.isPoisoned = false;
+        }
+        if (this.invincibleTimer > 0) this.invincibleTimer--;
+      }
+
+      // 狀態名稱映射到圖片表鍵值
+      getSpriteState() {
+        if (this.state === 'knockback' || this.state === 'knockdown') return 'restrained_ground';
+        if (this.state === 'restrained_air') return 'restrained';
+        if (this.state === 'restrained_box') return 'restrained';
+        return this.state;
+      }
+
+      draw(ctx) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        ctx.beginPath();
+        ctx.ellipse(this.x, this.y, this.width * 0.45, 10, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        this.animTimer++;
+        if (this.animTimer >= 10) { this.animTimer = 0; this.frameIndex++; }
+
+        let renderY = this.y - this.z - this.height;
+        let spriteKey = this.getSpriteState();
+        let catAssets = IMAGES[this.category];
+        let animList = (catAssets && catAssets[spriteKey]) ? catAssets[spriteKey] : (catAssets ? catAssets['idle'] : null);
+        let img = animList ? animList[this.frameIndex % animList.length] : null;
+
+        ctx.save();
+        ctx.translate(this.x, renderY + this.height);
+        if (this.facing === -1) ctx.scale(-1, 1);
+
+        if (this.team === 'ally') {
+          ctx.shadowColor = '#f687b3';
+          ctx.shadowBlur = 15;
+        }
+        if (this.untargetable) {
+          ctx.globalAlpha = 0.85; // 無法被攻擊的姐妹帶點半透明幻影感
+        }
+
+        if (img && img.complete && img.naturalWidth > 0) {
+          ctx.drawImage(img, -this.width / 2, -this.height, this.width, this.height);
+        } else {
+          ctx.fillStyle = this.isPoisoned ? '#48bb78' : this.color;
+          ctx.fillRect(-this.width / 2, -this.height, this.width, this.height);
+          ctx.fillStyle = 'white';
+          ctx.fillRect(8, -this.height + 12, 8, 8);
+        }
+        ctx.restore();
+
+        // 最終Boss箱子拘束透明外框
+        if (this.state === 'restrained_box') {
+          ctx.fillStyle = 'rgba(144, 205, 244, 0.35)';
+          ctx.strokeStyle = '#90cdf4';
+          ctx.lineWidth = 3;
+          ctx.fillRect(this.x - 35, renderY - 10, 70, this.height + 15);
+          ctx.strokeRect(this.x - 35, renderY - 10, 70, this.height + 15);
+        }
+
+        // 無法被攻擊的單位不顯示血條
+        if (!this.untargetable) {
+          let hpRatio = Math.max(0, this.hp / this.maxHp);
+          ctx.fillStyle = '#000';
+          ctx.fillRect(this.x - 25, renderY - 16, 50, 6);
+          ctx.fillStyle = this.team === 'ally' ? '#f687b3' : (this.category === 'player' ? '#48bb78' : '#f56565');
+          ctx.fillRect(this.x - 25, renderY - 16, 50 * hpRatio, 6);
+        }
+
+        if (this.label) {
+          ctx.fillStyle = '#edf2f7';
+          ctx.font = '12px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(this.label, this.x, renderY - 22);
+        }
+      }
+    }
+
+    // ==========================================
+    // 5. 主角類別 (含所有起手/拘束分段動作)
+    // ==========================================
+    class Player extends Entity {
+      constructor(x, y) {
+        super(x, y, 45, 80, '#3182ce', 'player');
+        this.label = '主角';
+        this.speed = 4.5;
+        this.mp = 100;
+        this.maxMp = 100;
+        this.grabbedEnemy = null;
+        this.capturedEnemies = [];
+        this.timer = 0;
+      }
+
+      hasEnoughMp(cost) {
+        if (document.getElementById('chk-inf-mp').checked) return true;
+        if (this.mp >= cost) { this.mp -= cost; return true; }
+        return false;
+      }
+
+      findTarget(enemies, rangeX, rangeY, rangeZ) {
+        for (let e of enemies) {
+          if (e.state === 'dead' || e.team === 'ally' || e.untargetable) continue;
+          let dx = (e.x - this.x) * this.facing;
+          let dy = Math.abs(e.y - this.y);
+          let dz = Math.abs(e.z - this.z);
+          if (dx >= -15 && dx <= rangeX && dy <= rangeY && dz <= rangeZ) return e;
+        }
+        return null;
+      }
+
+      update(enemies) {
+        if (document.getElementById('chk-godmode').checked) this.hp = this.maxHp;
+        if (document.getElementById('chk-inf-mp').checked) this.mp = this.maxMp;
+        else if (this.mp < this.maxMp) this.mp = Math.min(this.maxMp, this.mp + 0.15);
+
+        if (['restrained', 'restrained_ground', 'restrained_air', 'restrained_box', 'knockdown'].includes(this.state)) {
+          this.vx = 0; this.vy = 0;
+          if (this.state === 'knockdown') {
+            this.timer--;
+            if (this.timer <= 0) this.state = 'idle';
+          }
+          this.applyPhysics();
+          return;
+        }
+
+        if (this.state === 'idle' || this.state === 'walk') {
+          this.vx = 0; this.vy = 0;
+          if (keys['ArrowLeft'])  { this.vx = -this.speed; this.facing = -1; }
+          if (keys['ArrowRight']) { this.vx = this.speed;  this.facing = 1; }
+          if (keys['ArrowUp'])    { this.vy = -this.speed * 0.7; }
+          if (keys['ArrowDown'])  { this.vy = this.speed * 0.7; }
+
+          if (this.z === 0) this.state = (this.vx !== 0 || this.vy !== 0) ? 'walk' : 'idle';
+
+          if (keys['Space'] && this.z === 0) {
+            this.vz = 13;
+            this.state = 'jump';
+          }
+
+          // 普攻：先進入 grab_reach (抓出動作)
+          if (keys['KeyZ']) {
+            if (this.z === 0) {
+              this.state = 'grab_reach';
+              this.timer = 12; // 0.2秒抓出前搖
+            } else {
+              this.state = 'air_grab_reach';
+              this.timer = 12;
+            }
+          }
+
+          // 1技能：先進入 skill1_ctrl (控制起手)
+          if (keys['KeyX'] && this.z === 0 && this.hasEnoughMp(30)) {
+            this.state = 'skill1_ctrl';
+            this.timer = 20;
+            this.invincibleTimer = 85;
+            this.capturedEnemies = [];
+            for (let e of enemies) {
+              if (e.state !== 'dead' && e.team !== 'ally' && !e.untargetable && Math.abs(e.x - this.x) < 120 && Math.abs(e.y - this.y) < 55) {
+                e.state = 'restrained';
+                this.capturedEnemies.push(e);
+              }
+            }
+          }
+
+          // 2技能：skill2_dash (突進)
+          if (keys['KeyC'] && this.z === 0 && this.hasEnoughMp(25)) {
+            this.state = 'skill2_dash';
+            this.timer = 15;
+            this.vx = 9 * this.facing;
+            this.invincibleTimer = 15;
+          }
+
+          // 大招：ult
+          if (keys['KeyV'] && this.z === 0 && this.hasEnoughMp(60)) {
+            this.state = 'ult';
+            this.timer = 35;
+            spawnEffect(this.x + (40 * this.facing), this.y, 15, 'fx_player_s3', '#f687b3', 55, 35, false);
+            let target = this.findTarget(enemies, 85, 35, 40);
+            if (target) {
+              target.hp -= 45;
+              if (!target.immuneToCharm) target.isCharmed = true;
+            }
+          }
+        }
+
+        // 地面普攻(抓出) -> 判定命中轉 grab_hold (拘束)
+        if (this.state === 'grab_reach') {
+          this.vx = 0; this.vy = 0;
+          this.timer--;
+          if (this.timer === 8) {
+            let target = this.findTarget(enemies, 60, 25, 30);
+            if (target) {
+              this.grabbedEnemy = target;
+              target.state = 'restrained';
+              this.state = 'grab_hold';
+              this.timer = 55;
+              this.mp = Math.min(this.maxMp, this.mp + 15);
+            }
+          }
+          if (this.timer <= 0 && this.state === 'grab_reach') this.state = 'idle';
+        }
+
+        // 地面普攻(拘束中)
+        if (this.state === 'grab_hold' && this.grabbedEnemy) {
+          this.vx = 0; this.vy = 0;
+          this.grabbedEnemy.x = this.x - (20 * this.facing);
+          this.grabbedEnemy.y = this.y;
+          this.timer--;
+          if (this.timer % 10 === 0 && this.timer > 10) {
+            this.grabbedEnemy.hp -= 6;
+            spawnEffect(this.x - (15 * this.facing), this.y, 10, 'fx_player_atk', '#fbb6ce', 35, 15);
+          }
+          if (this.timer <= 0) {
+            this.state = 'idle';
+            this.grabbedEnemy.hp -= 15;
+            this.grabbedEnemy.state = 'knockback';
+            this.grabbedEnemy.vx = 10 * this.facing;
+            this.grabbedEnemy.vz = 8;
+            this.grabbedEnemy = null;
+          }
+        }
+
+        // 空中抓技(抓出) -> 命中轉 air_grab_hold
+        if (this.state === 'air_grab_reach') {
+          this.timer--;
+          let target = this.findTarget(enemies, 65, 30, 80);
+          if (target) {
+            this.grabbedEnemy = target;
+            target.state = 'restrained_air';
+            this.state = 'air_grab_hold';
+            this.mp = Math.min(this.maxMp, this.mp + 20);
+          } else if (this.timer <= 0 || this.z <= 0) {
+            this.state = this.z > 0 ? 'jump' : 'idle';
+          }
+        }
+
+        // 空中抓技(拘束下墜) -> 落地接地面拘束
+        if (this.state === 'air_grab_hold' && this.grabbedEnemy) {
+          this.vx = 0; this.vz = -16;
+          this.grabbedEnemy.x = this.x + (20 * this.facing);
+          this.grabbedEnemy.y = this.y;
+          this.grabbedEnemy.z = this.z;
+          if (this.z <= 0) {
+            this.z = 0; this.vz = 0; this.grabbedEnemy.z = 0;
+            this.grabbedEnemy.state = 'restrained';
+            this.state = 'grab_hold';
+            this.timer = 55;
+          }
+        }
+
+        // 一技能(控制) -> 轉一技能(攻擊)
+        if (this.state === 'skill1_ctrl') {
+          this.vx = 0; this.vy = 0;
+          this.timer--;
+          for (let e of this.capturedEnemies) { e.x = this.x + (15 * this.facing); e.y = this.y; }
+          if (this.timer <= 0) {
+            this.state = 'skill1_atk';
+            this.timer = 55;
+            spawnEffect(this.x, this.y, 10, 'fx_player_s1', '#faf089', 90, 45);
+          }
+        }
+
+        if (this.state === 'skill1_atk') {
+          this.vx = 0; this.vy = 0;
+          this.timer--;
+          for (let e of this.capturedEnemies) {
+            e.x = this.x + (15 * this.facing);
+            e.y = this.y;
+            if (this.timer % 10 === 0 && this.timer > 15) e.hp -= 5;
+          }
+          if (this.timer <= 0) {
+            this.state = 'idle';
+            for (let e of this.capturedEnemies) {
+              e.hp -= 20;
+              e.state = 'knockback';
+              e.vx = 12 * this.facing;
+              e.vz = 9;
+            }
+            this.capturedEnemies = [];
+          }
+        }
+
+        // 二技能(突進) -> 命中轉二技能(壓制)
+        if (this.state === 'skill2_dash') {
+          this.timer--;
+          let target = this.findTarget(enemies, 45, 25, 30);
+          if (target) {
+            this.grabbedEnemy = target;
+            this.state = 'skill2_pin';
+            this.timer = 50;
+            target.state = 'restrained_ground'; // 敵人顯示「被壓制拘束」圖
+            this.vx = 0;
+          } else if (this.timer <= 0) {
+            this.vx = 0; this.state = 'idle';
+          }
+        }
+
+        if (this.state === 'skill2_pin' && this.grabbedEnemy) {
+          this.timer--;
+          this.grabbedEnemy.x = this.x + (15 * this.facing);
+          if (this.timer % 10 === 0 && this.timer > 10) this.grabbedEnemy.hp -= 8;
+          if (this.timer === 35) spawnEffect(this.x, this.y, 5, 'fx_player_s2', '#68d391', 45, 30);
+          if (this.timer <= 0) {
+            this.state = 'idle';
+            this.grabbedEnemy.state = 'knockback';
+            this.grabbedEnemy.vx = 10 * this.facing;
+            this.grabbedEnemy.isPoisoned = true;
+            this.grabbedEnemy.poisonTimer = 180;
+            this.grabbedEnemy = null;
+          }
+        }
+
+        if (this.state === 'ult') {
+          this.vx = 0; this.vy = 0;
+          this.timer--;
+          if (this.timer <= 0) this.state = 'idle';
+        }
+
+        this.applyPhysics();
+        if (this.z === 0 && this.state === 'jump') this.state = 'idle';
+      }
+    }
+
+    // ==========================================
+    // 6. 敵方與 Boss 類別 (完整實裝所有專屬招式與階段)
+    // ==========================================
+    class Enemy extends Entity {
+      constructor(x, y, type) {
+        super(x, y, 45, 80, '#e53e3e', type); // category 直接對應怪物類型以讀取獨立圖庫
+        this.type = type;
+        this.team = 'enemy';
+        this.speed = 2;
+        this.timer = 0;
+        this.cooldown = 60;
+        this.immuneToCharm = false;
+
+        if (type === 'Minion') { this.label = '小兵'; this.hp = 50; this.maxHp = 50; }
+        if (type === 'DemonElite') { this.label = '惡魔菁英'; this.color = '#805ad5'; this.hp = 120; this.maxHp = 120; }
+        if (type === 'LongReachElite') { this.label = '長距菁英'; this.color = '#d69e2e'; this.hp = 120; this.maxHp = 120; }
+        if (type === 'TeleportElite') { this.label = '瞬移菁英'; this.color = '#319795'; this.hp = 120; this.maxHp = 120; }
+        if (type === 'SkunkSister') {
+          this.label = '臭鼬姐妹'; this.color = '#b794f4';
+          this.untargetable = true; // 無法被攻擊
+          this.immuneToCharm = true;
+          this.attacksLeft = Math.floor(Math.random() * 3) + 1; // 只會攻擊 1~3 次後退場
+          this.speed = 3.5;
+        }
+        if (type === 'SkunkKingBoss') { 
+          this.label = '【BOSS】臭鼬王'; this.color = '#553c9a'; this.width = 65; this.height = 100; 
+          this.hp = 350; this.maxHp = 350; this.immuneToCharm = true; this.aoeTimer = 260;
+        }
+        if (type === 'FinalBoss') { 
+          this.label = '【最終BOSS】'; this.color = '#9b2c2c'; this.width = 60; this.height = 95; 
+          this.hp = 500; this.maxHp = 500; this.immuneToCharm = true; this.speed = 3.5;
+        }
+      }
+
+      update(player, allEnemies) {
+        if (this.state === 'dead') return;
+
+        // 死亡與魅惑檢查 (無法被攻擊的單位除外)
+        if (!this.untargetable && this.hp <= 0) {
+          if (this.isCharmed) {
+            this.hp = this.maxHp;
+            this.team = 'ally';
+            this.isCharmed = false;
+            this.label = '[友軍]' + this.label;
+            this.state = 'idle';
+          } else {
+            this.state = 'dead';
+            return;
+          }
+        }
+
+        if (this.state === 'knockback') {
+          if (this.z === 0 && this.vz <= 0) {
+            this.vx *= 0.8;
+            if (Math.abs(this.vx) < 0.5) { this.vx = 0; this.state = 'idle'; }
+          }
+          this.applyPhysics();
+          return;
+        }
+
+        if (['restrained', 'restrained_ground', 'restrained_air'].includes(this.state)) {
+          this.vx = 0; this.vy = 0;
+          this.applyPhysics();
+          return;
+        }
+
+        let target = player;
+        if (this.team === 'ally') {
+          target = allEnemies.find(e => e.team === 'enemy' && !e.untargetable && e.state !== 'dead') || null;
+        }
+        if (!target) { this.applyPhysics(); return; }
+
+        let dx = target.x - this.x;
+        let dy = target.y - this.y;
+        let distX = Math.abs(dx);
+        let distY = Math.abs(dy);
+        this.facing = dx > 0 ? 1 : -1;
+        if (this.cooldown > 0) this.cooldown--;
+
+        // ---------------- 專屬階段動作處理 ----------------
+
+        // 1. 惡魔菁英：遠距拉曳起手 (pull_reach) -> 拉曳後拘束 (pull_hold)
+        if (this.state === 'pull_reach') {
+          this.vx = 0; this.vy = 0;
+          this.timer--;
+          if (this.timer <= 0) {
+            if (distX < 160 && distY < 35 && target.invincibleTimer <= 0) {
+              this.state = 'pull_hold';
+              this.timer = 55;
+              target.state = 'restrained';
+              target.z = 0;
+            } else {
+              this.state = 'idle'; this.cooldown = 70;
+            }
+          }
+          this.applyPhysics(); return;
+        }
+
+        // 2. 瞬移菁英：瞬移前等待約1秒 (tp_wait) -> 瞬移拘束 (tp_hold)
+        if (this.state === 'tp_wait') {
+          this.vx = 0; this.vy = 0;
+          this.timer--;
+          if (this.timer <= 0) {
+            this.x = target.x - (20 * this.facing);
+            this.y = target.y;
+            if (target.invincibleTimer <= 0 && target.z === 0) {
+              this.state = 'tp_hold';
+              this.timer = 55;
+              target.state = 'restrained';
+            } else {
+              this.state = 'idle'; this.cooldown = 80;
+            }
+          }
+          this.applyPhysics(); return;
+        }
+
+        // 3. 通用起手抓技 (grab_reach / grab_long / mid_grab)
+        if (['grab_reach', 'grab_long', 'mid_grab'].includes(this.state)) {
+          this.vx = 0; this.vy = 0;
+          this.timer--;
+          if (this.timer <= 0) {
+            let hitRange = (this.state === 'grab_long' || this.state === 'mid_grab') ? 130 : 60;
+            if (distX <= hitRange && distY < 30 && target.invincibleTimer <= 0) {
+              if (this.state === 'grab_long') {
+                this.state = 'ground_hold'; // 長距菁英地板拘束
+                target.state = 'restrained_ground';
+              } else if (this.state === 'mid_grab') {
+                this.state = 'grab_hold';
+                target.state = 'restrained_ground';
+              } else {
+                this.state = 'grab_hold';
+                target.state = 'restrained';
+              }
+              this.timer = 55;
+            } else {
+              this.state = 'idle'; this.cooldown = 60;
+            }
+          }
+          this.applyPhysics(); return;
+        }
+
+        // 4. 各種持續拘束扣血階段 (grab_hold / pull_hold / ground_hold / tp_hold / half_hp_ult)
+        if (['grab_hold', 'pull_hold', 'ground_hold', 'tp_hold', 'half_hp_ult'].includes(this.state)) {
+          this.vx = 0; this.vy = 0;
+          this.timer--;
+          target.x = this.x + (20 * this.facing);
+          target.y = this.y;
+          if (this.timer % 12 === 0) {
+            target.hp -= 5;
+            let fxMap = {
+              DemonElite: 'fx_demon_atk',
+              LongReachElite: 'fx_long_atk',
+              TeleportElite: 'fx_tp_atk',
+              SkunkKingBoss: 'fx_skunk_atk',
+              FinalBoss: 'fx_final_atk'
+            };
+            spawnEffect(this.x, this.y, 10, fxMap[this.type] || 'fx_fart_common', '#68d391', 35, 15);
+          }
+          if (this.timer <= 0) {
+            this.state = 'idle';
+            this.cooldown = 90;
+            target.state = 'knockdown';
+            target.timer = 40;
+          }
+          this.applyPhysics(); return;
+        }
+
+        // 5. 臭鼬王全場地面臭氣 (aoe_gas)
+        if (this.state === 'aoe_gas') {
+          this.vx = 0; this.vy = 0;
+          this.timer--;
+          if (this.timer === 20) {
+            spawnEffect(canvas.width / 2, 375, 0, 'fx_skunk_atk', '#d69e2e', 420, 35);
+            if (target.z < 25 && target.invincibleTimer <= 0) {
+              target.hp -= 15; target.state = 'knockdown'; target.timer = 35;
+            }
+          }
+          if (this.timer <= 0) { this.state = 'idle'; this.cooldown = 60; }
+          this.applyPhysics(); return;
+        }
+
+        // 6. 最終Boss 大招箱子拘束 (box_ult)
+        if (this.state === 'box_ult') {
+          this.vx = 0; this.vy = 0;
+          this.timer--;
+          target.x = this.x + (35 * this.facing);
+          target.y = this.y;
+          if (this.timer % 10 === 0) {
+            target.hp -= 8;
+            spawnEffect(target.x, target.y, 20, 'fx_final_atk', '#48bb78', 40, 15);
+          }
+          if (this.timer <= 0) {
+            this.state = 'idle';
+            this.cooldown = 120;
+            target.state = 'knockdown';
+            target.timer = 50;
+          }
+          this.applyPhysics(); return;
+        }
+
+        // 7. 臭鼬姐妹攻擊動作 (attack) -> 打完 1~3 次自動退場
+        if (this.type === 'SkunkSister' && this.state === 'attack') {
+          this.vx = 0; this.vy = 0;
+          this.timer--;
+          if (this.timer === 10 && distX <= 55 && distY < 25 && target.invincibleTimer <= 0) {
+            target.hp -= 6;
+            spawnEffect(this.x + 20 * this.facing, this.y, 15, 'fx_skunk_atk', '#b794f4', 35, 20);
+          }
+          if (this.timer <= 0) {
+            this.attacksLeft--;
+            if (this.attacksLeft <= 0) {
+              this.state = 'dead'; // 攻擊次數用完退場，臭鼬王之後會再召喚
+            } else {
+              this.state = 'idle';
+              this.cooldown = 50;
+            }
+          }
+          this.applyPhysics(); return;
+        }
+
+        // ---------------- 待機與追擊 AI 決策 ----------------
+        if (this.state === 'idle') {
+          // 最終魔王：血量剩餘一半以下才會飛行
+          if (this.type === 'FinalBoss') {
+            if (this.hp <= this.maxHp / 2) {
+              if (this.z < 55) this.z += 2;
+              this.speed = 4.5;
+            } else {
+              this.z = 0;
+              this.speed = 2.8;
+            }
+          }
+
+          if (distX > 45) this.vx = this.speed * this.facing;
+          else this.vx = 0;
+          if (distY > 10) this.vy = (this.speed * 0.6) * (dy > 0 ? 1 : -1);
+          else this.vy = 0;
+
+          // 臭鼬王定期召喚姐妹 (場上最多同時存在 2 名姐妹，退場後會再補召)
+          if (this.type === 'SkunkKingBoss') {
+            this.aoeTimer--;
+            if (this.aoeTimer <= 0) {
+              this.state = 'aoe_gas'; this.timer = 35;
+              this.aoeTimer = 320;
+              this.applyPhysics(); return;
+            }
+            let activeSisters = allEnemies.filter(e => e.type === 'SkunkSister' && e.state !== 'dead').length;
+            if (activeSisters < 2 && Math.random() < 0.015) {
+              let sister = new Enemy(this.x + (Math.random() > 0.5 ? 60 : -60), this.y, 'SkunkSister');
+              if (Math.random() > 0.5) sister.z = 75;
+              allEnemies.push(sister);
+            }
+          }
+
+          if (this.cooldown <= 0 && target.invincibleTimer <= 0) {
+            // 惡魔菁英：空中或中遠距 -> 遠距拉曳；近距 -> 普通抓技
+            if (this.type === 'DemonElite') {
+              if ((target.z > 15 || (distX > 65 && distX < 145)) && distY < 30) {
+                this.state = 'pull_reach'; this.timer = 18;
+              } else if (distX <= 50 && distY < 25) {
+                this.state = 'grab_reach'; this.timer = 14;
+              }
+            }
+            // 長距菁英：遠距/倒地 -> 長抓技；近距 -> 普通抓技
+            else if (this.type === 'LongReachElite') {
+              if (distY < 25 && (distX > 55 && distX < 125 || target.state === 'knockdown')) {
+                this.state = 'grab_long'; this.timer = 16;
+              } else if (distX <= 50 && distY < 25) {
+                this.state = 'grab_reach'; this.timer = 14;
+              }
+            }
+            // 瞬移菁英：遠距 -> 進入等待1秒瞬移拘束；近距 -> 抓技
+            else if (this.type === 'TeleportElite') {
+              if (distX >= 140 && distX <= 220 && distY < 30 && target.z === 0) {
+                this.state = 'tp_wait'; this.timer = 60; // 等待約 1 秒 (60幀)
+              } else if (distX <= 50 && distY < 25) {
+                this.state = 'grab_reach'; this.timer = 14;
+              }
+            }
+            // 第三關 Boss 臭鼬王
+            else if (this.type === 'SkunkKingBoss') {
+              if (this.hp <= this.maxHp / 2 && distX < 75 && distY < 30 && target.z === 0) {
+                this.state = 'half_hp_ult'; this.timer = 75; target.state = 'restrained_ground';
+              } else if (distX <= 55 && distY < 25 && target.z === 0) {
+                this.state = 'grab_reach'; this.timer = 15;
+              }
+            }
+            // 第五關 最終 Boss
+            else if (this.type === 'FinalBoss') {
+              if (this.hp <= this.maxHp / 2 && distX < 85 && distY < 30 && Math.random() < 0.08) {
+                this.z = 0; this.state = 'box_ult'; this.timer = 90; target.state = 'restrained_box';
+              } else if ((target.z > 0 || (distX >= 65 && distX <= 130)) && distY < 30) {
+                this.z = 0; this.state = 'mid_grab'; this.timer = 16;
+              } else if (distX <= 55 && distY < 25) {
+                this.z = 0; this.state = 'grab_reach'; this.timer = 14;
+              }
+            }
+            // 臭鼬姐妹
+            else if (this.type === 'SkunkSister') {
+              if (distX <= 50 && distY < 25) {
+                this.z = 0; this.state = 'attack'; this.timer = 20;
+              }
+            }
+            // 普通小兵
+            else if (this.type === 'Minion') {
+              if (distX <= 45 && distY < 20 && Math.abs(target.z - this.z) < 25) {
+                target.hp -= 5;
+                this.cooldown = 60;
+              }
+            }
+          }
+        }
+        this.applyPhysics();
+      }
+    }
+
+    // ==========================================
+    // 7. 五關推進腳本與主迴圈
+    // ==========================================
+    const STAGES = [
+      ['Minion', 'Minion'],
+      ['Minion', 'DemonElite', 'LongReachElite'],
+      ['SkunkKingBoss'],
+      ['DemonElite', 'LongReachElite', 'TeleportElite', 'Minion'],
+      ['FinalBoss']
+    ];
+
+    let currentStage = 0;
+    let player = new Player(150, 360);
+    let enemies = [];
+    let stageClearTimer = 0;
+
+    function loadStage(stageIndex) {
+      enemies = [];
+      let wave = STAGES[stageIndex];
+      wave.forEach((type, idx) => {
+        enemies.push(new Enemy(650 + (idx * 60), 310 + (idx * 35), type));
+      });
+    }
+
+    function gameLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = '#4a5568';
+      ctx.fillRect(0, FLOOR_MIN_Y, canvas.width, FLOOR_MAX_Y - FLOOR_MIN_Y);
+      
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 20px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(`第 ${currentStage + 1} / 5 關`, 20, 35);
+
+      // 玩家血條 & 氣量條
+      ctx.fillStyle = '#1a202c';
+      ctx.fillRect(20, 48, 200, 14);
+      ctx.fillStyle = '#48bb78';
+      ctx.fillRect(20, 48, 200 * Math.max(0, player.hp / player.maxHp), 14);
+      ctx.font = '11px sans-serif';
+      ctx.fillStyle = 'white';
+      ctx.fillText(`HP: ${Math.ceil(player.hp)} / ${player.maxHp}`, 25, 59);
+
+      ctx.fillStyle = '#1a202c';
+      ctx.fillRect(20, 66, 200, 12);
+      ctx.fillStyle = '#4299e1';
+      ctx.fillRect(20, 66, 200 * Math.max(0, player.mp / player.maxMp), 12);
+      ctx.fillText(`MP: ${Math.floor(player.mp)} / ${player.maxMp}`, 25, 76);
+
+      if (!isGameStarted) {
+        let renderList = [player, ...enemies];
+        renderList.forEach(entity => entity.draw(ctx));
+        requestAnimationFrame(gameLoop);
+        return;
+      }
+
+      // 過關判定忽略「無法被攻擊的臭鼬姐妹」
+      let activeEnemies = enemies.filter(e => e.state !== 'dead' && e.team === 'enemy' && !e.untargetable);
+      if (activeEnemies.length === 0) {
+        if (currentStage < STAGES.length - 1) {
+          stageClearTimer++;
+          ctx.fillStyle = '#fbd38d';
+          ctx.font = 'bold 24px sans-serif';
+          ctx.fillText('區域清空！準備前往下一關...', 300, 150);
+          if (stageClearTimer > 120) {
+            currentStage++;
+            stageClearTimer = 0;
+            player.x = 150;
+            player.hp = Math.min(player.maxHp, player.hp + 30);
+            loadStage(currentStage);
+          }
+        } else {
+          ctx.fillStyle = '#68d391';
+          ctx.font = 'bold 34px sans-serif';
+          ctx.fillText('恭喜通關！擊敗了最終 BOSS！', 220, 200);
+        }
+      }
+
+      if (player.hp <= 0) {
+        ctx.fillStyle = '#fc8181';
+        ctx.font = 'bold 34px sans-serif';
+        ctx.fillText('你被打敗了！請按右上角設定重置或重新整理', 140, 200);
+        requestAnimationFrame(gameLoop);
+        return;
+      }
+
+      player.update(enemies);
+      enemies.forEach(e => e.update(player, enemies));
+      effects.forEach(ef => ef.update());
+      effects = effects.filter(ef => ef.timer > 0);
+
+      let renderList = [player, ...enemies.filter(e => e.state !== 'dead')];
+      renderList.sort((a, b) => a.y - b.y);
+      renderList.forEach(entity => entity.draw(ctx));
+      effects.forEach(ef => ef.draw(ctx));
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    loadAssets(() => {
+      loadStage(0);
+      gameLoop();
+    });
+  </script>
+</body>
+</html>
