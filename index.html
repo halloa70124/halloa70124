@@ -2,50 +2,180 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <title>2.5D 動作遊戲原型測試</title>
+  <title>2.5D 橫向卷軸動作遊戲</title>
   <style>
-    body { margin: 0; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; color: white; font-family: sans-serif; }
-    canvas { background: #4a5568; border: 3px solid #cbd5e0; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
-    #ui { position: absolute; top: 20px; text-align: center; pointer-events: none; }
+    body {
+      margin: 0;
+      background-color: #1a202c;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      color: white;
+      font-family: "Microsoft JhengHei", sans-serif;
+      user-select: none;
+    }
+    canvas {
+      background-color: #2d3748;
+      border: 4px solid #718096;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+    }
+    .controls {
+      margin-bottom: 10px;
+      background: #2d3748;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    span.key {
+      background: #4a5568;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: bold;
+      color: #fbd38d;
+    }
   </style>
 </head>
 <body>
 
-  <div id="ui">
-    <h2>2.5D 引擎原型測試</h2>
-    <p>方向鍵：移動 (X/Y軸) ｜ Space：跳躍 (Z軸) ｜ Z：普攻抓技 ｜ X：1技能群控</p>
+  <div class="controls">
+    <strong>操作說明：</strong>
+    <span class="key">方向鍵</span> 移動(X/Y深度) ｜ 
+    <span class="key">Space</span> 跳躍(Z高度) ｜ 
+    <span class="key">Z</span> 普攻抓技(地/空) ｜ 
+    <span class="key">X</span> 1技能(群控) ｜ 
+    <span class="key">C</span> 2技能(突進上毒) ｜ 
+    <span class="key">V</span> 大招(魅惑轉化)
   </div>
-  <canvas id="gameCanvas" width="800" height="450"></canvas>
+
+  <canvas id="gameCanvas" width="900" height="500"></canvas>
 
   <script>
+    // ==========================================
+    // 1. 遊戲基礎設定與畫布初始化
+    // ==========================================
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
 
-    // 場地 Y 軸可行走範圍限制 (地板深度)
-    const FLOOR_MIN_Y = 250;
-    const FLOOR_MAX_Y = 420;
-    const GRAVITY = 0.6;
+    const FLOOR_MIN_Y = 280; // 地板最深處 (畫面越上方)
+    const FLOOR_MAX_Y = 470; // 地板最淺處 (畫面越下方)
+    const GRAVITY = 0.65;    // 重力加速度
 
-    // 按鍵狀態監聽
+    // 鍵盤監聽
     const keys = {};
     window.addEventListener('keydown', e => keys[e.code] = true);
     window.addEventListener('keyup', e => keys[e.code] = false);
 
-    // 基礎角色類別 (包含 2.5D 座標與繪製邏輯)
+    // ==========================================
+    // 2. 單張 PNG 圖片素材管理員 (含防呆機制)
+    // ==========================================
+    // 你可以把畫好的 PNG 放進 images 資料夾，並修改這裡的檔名
+    const ASSET_PATHS = {
+      player: {
+        idle: ['images/player_idle.png'],
+        walk: ['images/player_walk1.png', 'images/player_walk2.png'],
+        jump: ['images/player_jump.png'],
+        grab_attack: ['images/player_grab1.png', 'images/player_grab2.png'],
+        skill_1: ['images/player_skill1.png'],
+        skill_2_pin: ['images/player_skill2.png'],
+        ultimate_attack: ['images/player_ult.png']
+      },
+      enemy: {
+        idle: ['images/enemy_idle.png'],
+        restrained: ['images/enemy_hurt.png'],
+        knockback: ['images/enemy_fly.png']
+      },
+      effects: {
+        pink_gas: ['images/fart_pink.png'],
+        yellow_gas: ['images/fart_yellow.png'],
+        green_gas: ['images/fart_green.png'],
+        heart: ['images/heart.png']
+      }
+    };
+
+    const IMAGES = {};
+    function loadAssets(onComplete) {
+      let total = 0, loaded = 0;
+      for (let cat in ASSET_PATHS) {
+        IMAGES[cat] = {};
+        for (let state in ASSET_PATHS[cat]) total += ASSET_PATHS[cat][state].length;
+      }
+      if (total === 0) return onComplete();
+
+      for (let cat in ASSET_PATHS) {
+        for (let state in ASSET_PATHS[cat]) {
+          IMAGES[cat][state] = ASSET_PATHS[cat][state].map(src => {
+            const img = new Image();
+            img.src = src;
+            const checkDone = () => { loaded++; if (loaded >= total) onComplete(); };
+            img.onload = checkDone;
+            img.onerror = checkDone; // 找不到圖也繼續執行，自動改用方塊代替
+            return img;
+          });
+        }
+      }
+    }
+
+    // ==========================================
+    // 3. 特效系統 (氣體煙霧、愛心、玻璃箱)
+    // ==========================================
+    let effects = [];
+    class VisualEffect {
+      constructor(x, y, z, type, color, radius, duration = 25) {
+        this.x = x; this.y = y; this.z = z;
+        this.type = type;       // 對應 IMAGES.effects 的名稱
+        this.fallbackColor = color; // 沒圖片時的備用顏色
+        this.radius = radius;
+        this.timer = duration;
+        this.maxTimer = duration;
+      }
+      update() { this.timer--; }
+      draw(ctx) {
+        let renderY = this.y - this.z - 40;
+        let animList = IMAGES.effects[this.type];
+        let img = animList ? animList[0] : null;
+
+        if (img && img.complete && img.naturalWidth > 0) {
+          ctx.drawImage(img, this.x - this.radius, renderY - this.radius, this.radius * 2, this.radius * 2);
+        } else {
+          // 沒圖片時畫半透明氣體圓圈
+          ctx.save();
+          ctx.globalAlpha = this.timer / this.maxTimer;
+          ctx.fillStyle = this.fallbackColor;
+          ctx.beginPath();
+          ctx.arc(this.x, renderY, this.radius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+    }
+
+    function spawnEffect(x, y, z, type, color, radius = 40, duration = 25) {
+      effects.push(new VisualEffect(x, y, z, type, color, radius, duration));
+    }
+
+    // ==========================================
+    // 4. 基礎角色類別 (處理 2.5D 物理、影子與繪圖)
+    // ==========================================
     class Entity {
-      constructor(x, y, color) {
-        this.x = x;
-        this.y = y; // 深度 (地板位置)
-        this.z = 0; // 高度 (跳躍用)
-        this.vx = 0;
-        this.vy = 0;
-        this.vz = 0;
-        this.width = 40;
-        this.height = 70;
+      constructor(x, y, width, height, color, category) {
+        this.x = x; this.y = y; this.z = 0;
+        this.vx = 0; this.vy = 0; this.vz = 0;
+        this.width = width; this.height = height;
         this.color = color;
-        this.facing = 1; // 1: 右, -1: 左
+        this.category = category;
+        this.facing = 1; // 1: 面右, -1: 面左
         this.state = 'idle';
-        this.hp = 100;
+        this.hp = 100; this.maxHp = 100;
+        
+        // 狀態計時器
+        this.animTimer = 0;
+        this.frameIndex = 0;
+        this.invincibleTimer = 0;
+        this.isPoisoned = false;
+        this.poisonTimer = 0;
       }
 
       applyPhysics() {
@@ -53,95 +183,225 @@
         this.y += this.vy;
         this.z += this.vz;
 
-        // 重力與落地判定
-        if (this.z > 0) {
-          this.vz -= GRAVITY;
-        } else {
-          this.z = 0;
-          this.vz = 0;
-        }
+        // 重力
+        if (this.z > 0) this.vz -= GRAVITY;
+        else { this.z = 0; this.vz = 0; }
 
-        // 限制 Y 軸走位不超出地板邊界
+        // 限制場地邊界
+        if (this.x < 30) this.x = 30;
+        if (this.x > canvas.width - 30) this.x = canvas.width - 30;
         if (this.y < FLOOR_MIN_Y) this.y = FLOOR_MIN_Y;
         if (this.y > FLOOR_MAX_Y) this.y = FLOOR_MAX_Y;
+
+        // 中毒持續扣血邏輯
+        if (this.isPoisoned) {
+          this.poisonTimer--;
+          if (this.poisonTimer % 30 === 0) this.hp -= 3;
+          if (this.poisonTimer <= 0) this.isPoisoned = false;
+        }
+        if (this.invincibleTimer > 0) this.invincibleTimer--;
       }
 
       draw(ctx) {
-        // 1. 畫地板影子 (永遠貼在 z=0 的 y 座標上)
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+        // 1. 畫地板影子 (永遠貼在 z=0)
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
         ctx.beginPath();
-        ctx.ellipse(this.x, this.y, this.width / 2, 10, 0, 0, Math.PI * 2);
+        ctx.ellipse(this.x, this.y, this.width * 0.45, 10, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // 2. 計算實際渲染的 Y 座標 (扣掉跳躍高度 Z)
+        // 2. 動畫幀切換
+        this.animTimer++;
+        if (this.animTimer >= 10) { this.animTimer = 0; this.frameIndex++; }
+
         let renderY = this.y - this.z - this.height;
+        let animList = (IMAGES[this.category] && IMAGES[this.category][this.state]) 
+                       ? IMAGES[this.category][this.state] 
+                       : (IMAGES[this.category] ? IMAGES[this.category]['idle'] : null);
+        let img = animList ? animList[this.frameIndex % animList.length] : null;
 
-        // 3. 畫出角色本體 (之後這裡替換成你的 Spritesheet 圖片)
-        ctx.fillStyle = this.color;
-        ctx.fillRect(this.x - this.width / 2, renderY, this.width, this.height);
+        // 3. 繪製本體 (支援左右自動翻轉)
+        ctx.save();
+        ctx.translate(this.x, renderY + this.height);
+        if (this.facing === -1) ctx.scale(-1, 1);
 
-        // 畫出面向指示 (眼睛)
-        ctx.fillStyle = 'white';
-        let eyeX = this.facing === 1 ? this.x + 8 : this.x - 14;
-        ctx.fillRect(eyeX, renderY + 12, 6, 6);
+        // 魅惑轉化為友軍時加上粉色光暈提示
+        if (this.team === 'ally') {
+          ctx.shadowColor = '#f687b3';
+          ctx.shadowBlur = 15;
+        }
 
-        // 顯示狀態與血量
-        ctx.fillStyle = '#fff';
-        ctx.font = '12px Arial';
-        ctx.fillText(`HP:${this.hp} [${this.state}]`, this.x - 30, renderY - 8);
+        if (img && img.complete && img.naturalWidth > 0) {
+          ctx.drawImage(img, -this.width / 2, -this.height, this.width, this.height);
+        } else {
+          ctx.fillStyle = this.isPoisoned ? '#48bb78' : this.color;
+          ctx.fillRect(-this.width / 2, -this.height, this.width, this.height);
+          // 畫眼睛辨識方向
+          ctx.fillStyle = 'white';
+          ctx.fillRect(8, -this.height + 12, 8, 8);
+        }
+        ctx.restore();
+
+        // 4. 特殊狀態視覺：被最終 Boss 關進玻璃箱
+        if (this.state === 'restrained_box') {
+          ctx.fillStyle = 'rgba(144, 205, 244, 0.35)';
+          ctx.strokeStyle = '#90cdf4';
+          ctx.lineWidth = 3;
+          ctx.fillRect(this.x - 35, renderY - 10, 70, this.height + 15);
+          ctx.strokeRect(this.x - 35, renderY - 10, 70, this.height + 15);
+        }
+
+        // 5. 頭頂血條與名稱
+        let hpRatio = Math.max(0, this.hp / this.maxHp);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(this.x - 25, renderY - 16, 50, 6);
+        ctx.fillStyle = this.team === 'ally' ? '#f687b3' : (this.category === 'player' ? '#48bb78' : '#f56565');
+        ctx.fillRect(this.x - 25, renderY - 16, 50 * hpRatio, 6);
+
+        if (this.label) {
+          ctx.fillStyle = '#edf2f7';
+          ctx.font = '12px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(this.label, this.x, renderY - 22);
+        }
       }
     }
 
-    // 玩家類別
+    // ==========================================
+    // 5. 主角類別 (完整技能組)
+    // ==========================================
     class Player extends Entity {
       constructor(x, y) {
-        super(x, y, '#3182ce'); // 藍色方塊代表主角
-        this.speed = 4;
+        super(x, y, 45, 80, '#3182ce', 'player');
+        this.label = '主角';
+        this.speed = 4.5;
         this.grabbedEnemy = null;
-        this.comboTimer = 0;
+        this.capturedEnemies = [];
+        this.timer = 0;
+      }
+
+      // 3D 空間碰撞判定 (同時檢查 X距離、Y深度、Z高度)
+      findTarget(enemies, rangeX, rangeY, rangeZ) {
+        for (let e of enemies) {
+          if (e.state === 'dead' || e.team === 'ally') continue;
+          let dx = (e.x - this.x) * this.facing;
+          let dy = Math.abs(e.y - this.y);
+          let dz = Math.abs(e.z - this.z);
+          if (dx >= -15 && dx <= rangeX && dy <= rangeY && dz <= rangeZ) return e;
+        }
+        return null;
       }
 
       update(enemies) {
-        // 自由移動狀態
-        if (this.state === 'idle' || this.state === 'walk') {
-          this.vx = 0;
-          this.vy = 0;
+        // 被敵人拘束或倒地時無法操作
+        if (['restrained', 'restrained_ground', 'restrained_air', 'restrained_box', 'knockdown'].includes(this.state)) {
+          this.vx = 0; this.vy = 0;
+          if (this.state === 'knockdown') {
+            this.timer--;
+            if (this.timer <= 0) this.state = 'idle';
+          }
+          this.applyPhysics();
+          return;
+        }
 
-          if (keys['ArrowLeft']) { this.vx = -this.speed; this.facing = -1; }
-          if (keys['ArrowRight']) { this.vx = this.speed; this.facing = 1; }
-          if (keys['ArrowUp']) { this.vy = -this.speed * 0.7; } // Y軸移動通常稍微慢一點較自然
-          if (keys['ArrowDown']) { this.vy = this.speed * 0.7; }
+        // --- 自由操作狀態 ---
+        if (this.state === 'idle' || this.state === 'walk') {
+          this.vx = 0; this.vy = 0;
+          if (keys['ArrowLeft'])  { this.vx = -this.speed; this.facing = -1; }
+          if (keys['ArrowRight']) { this.vx = this.speed;  this.facing = 1; }
+          if (keys['ArrowUp'])    { this.vy = -this.speed * 0.7; }
+          if (keys['ArrowDown'])  { this.vy = this.speed * 0.7; }
+
+          if (this.z === 0) this.state = (this.vx !== 0 || this.vy !== 0) ? 'walk' : 'idle';
 
           // 跳躍 (Space)
           if (keys['Space'] && this.z === 0) {
-            this.vz = 12;
+            this.vz = 13;
+            this.state = 'jump';
           }
 
-          // 普攻：地面抓技 (Z鍵)
-          if (keys['KeyZ'] && this.z === 0) {
-            let target = this.checkHitbox(enemies, 50, 20, 30);
+          // 【普攻 Z】地面抓技 vs 空中抓取下砸
+          if (keys['KeyZ']) {
+            if (this.z === 0) {
+              let target = this.findTarget(enemies, 55, 25, 30);
+              if (target) {
+                this.state = 'grab_attack';
+                this.timer = 60;
+                this.grabbedEnemy = target;
+                target.state = 'restrained';
+              }
+            } else {
+              // 空中發動
+              let target = this.findTarget(enemies, 65, 30, 80);
+              if (target) {
+                this.state = 'air_grab_drop';
+                this.grabbedEnemy = target;
+                target.state = 'restrained_air';
+              }
+            }
+          }
+
+          // 【1技能 X】群體控制與範圍解圍
+          if (keys['KeyX'] && this.z === 0) {
+            this.state = 'skill_1';
+            this.timer = 70;
+            this.invincibleTimer = 70; // 施放期間無敵
+            this.capturedEnemies = [];
+            for (let e of enemies) {
+              if (e.state !== 'dead' && e.team !== 'ally' && Math.abs(e.x - this.x) < 120 && Math.abs(e.y - this.y) < 55) {
+                e.state = 'restrained';
+                this.capturedEnemies.push(e);
+              }
+            }
+          }
+
+          // 【2技能 C】霸體突進與單體上毒
+          if (keys['KeyC'] && this.z === 0) {
+            this.state = 'skill_2_dash';
+            this.timer = 15;
+            this.vx = 9 * this.facing;
+            this.invincibleTimer = 15;
+          }
+
+          // 【大招 V】魅惑轉化
+          if (keys['KeyV'] && this.z === 0) {
+            this.state = 'ultimate_attack';
+            this.timer = 30;
+            let target = this.findTarget(enemies, 80, 35, 40);
             if (target) {
-              this.state = 'grab_attack';
-              this.comboTimer = 60;
-              this.grabbedEnemy = target;
-              target.state = 'restrained';
+              target.hp -= 45;
+              if (!target.immuneToCharm) {
+                target.isCharmed = true;
+                spawnEffect(target.x, target.y, target.z + 30, 'heart', '#f687b3', 35, 40);
+              }
             }
           }
         }
 
-        // 執行地面拘束連段
-        if (this.state === 'grab_attack' && this.grabbedEnemy) {
-          this.vx = 0;
-          this.vy = 0;
-          this.grabbedEnemy.x = this.x + (25 * this.facing);
+        // --- 狀態機執行區 ---
+        // 1. 空中抓人下砸
+        if (this.state === 'air_grab_drop' && this.grabbedEnemy) {
+          this.vx = 0; this.vz = -16;
+          this.grabbedEnemy.x = this.x + (20 * this.facing);
           this.grabbedEnemy.y = this.y;
-          this.comboTimer--;
-
-          if (this.comboTimer % 10 === 0 && this.comboTimer > 10) {
-            this.grabbedEnemy.hp -= 5;
+          this.grabbedEnemy.z = this.z;
+          if (this.z <= 0) {
+            this.z = 0; this.vz = 0; this.grabbedEnemy.z = 0;
+            this.state = 'grab_attack';
+            this.timer = 60;
           }
+        }
 
-          if (this.comboTimer <= 0) {
+        // 2. 地面拘束連段
+        if (this.state === 'grab_attack' && this.grabbedEnemy) {
+          this.vx = 0; this.vy = 0;
+          this.grabbedEnemy.x = this.x - (20 * this.facing);
+          this.grabbedEnemy.y = this.y;
+          this.timer--;
+          if (this.timer % 10 === 0 && this.timer > 10) {
+            this.grabbedEnemy.hp -= 6;
+            spawnEffect(this.x - (15 * this.facing), this.y, 10, 'pink_gas', '#fbb6ce', 35, 15);
+          }
+          if (this.timer <= 0) {
             this.state = 'idle';
             this.grabbedEnemy.hp -= 15;
             this.grabbedEnemy.state = 'knockback';
@@ -151,38 +411,248 @@
           }
         }
 
-        this.applyPhysics();
-      }
-
-      // 2.5D 空間碰撞檢測 (同時驗證 X距離、Y深度、Z高度)
-      checkHitbox(enemies, rangeX, rangeY, rangeZ) {
-        for (let enemy of enemies) {
-          if (enemy.state === 'dead') continue;
-          let dx = (enemy.x - this.x) * this.facing; // 確保敵人在面向的前方
-          let dy = Math.abs(enemy.y - this.y);
-          let dz = Math.abs(enemy.z - this.z);
-
-          if (dx >= 0 && dx <= rangeX && dy <= rangeY && dz <= rangeZ) {
-            return enemy;
+        // 3. 1技能執行
+        if (this.state === 'skill_1') {
+          this.vx = 0; this.vy = 0;
+          this.timer--;
+          for (let e of this.capturedEnemies) {
+            e.x = this.x + (15 * this.facing);
+            e.y = this.y;
+            if (this.timer % 10 === 0 && this.timer > 15) e.hp -= 4;
+          }
+          if (this.timer === 50) spawnEffect(this.x, this.y, 10, 'yellow_gas', '#faf089', 90, 40);
+          if (this.timer <= 0) {
+            this.state = 'idle';
+            for (let e of this.capturedEnemies) {
+              e.hp -= 20;
+              e.state = 'knockback';
+              e.vx = 12 * this.facing;
+              e.vz = 9;
+            }
+            this.capturedEnemies = [];
           }
         }
-        return null;
+
+        // 4. 2技能突進與壓制
+        if (this.state === 'skill_2_dash') {
+          this.timer--;
+          let target = this.findTarget(enemies, 45, 25, 30);
+          if (target) {
+            this.grabbedEnemy = target;
+            this.state = 'skill_2_pin';
+            this.timer = 50;
+            target.state = 'restrained_ground';
+            this.vx = 0;
+          } else if (this.timer <= 0) {
+            this.vx = 0; this.state = 'idle';
+          }
+        }
+
+        if (this.state === 'skill_2_pin' && this.grabbedEnemy) {
+          this.timer--;
+          this.grabbedEnemy.x = this.x + (15 * this.facing);
+          if (this.timer % 10 === 0 && this.timer > 10) this.grabbedEnemy.hp -= 8;
+          if (this.timer === 35) spawnEffect(this.x, this.y, 5, 'green_gas', '#68d391', 45, 30);
+          if (this.timer <= 0) {
+            this.state = 'idle';
+            this.grabbedEnemy.state = 'knockback';
+            this.grabbedEnemy.vx = 10 * this.facing;
+            this.grabbedEnemy.isPoisoned = true;
+            this.grabbedEnemy.poisonTimer = 180;
+            this.grabbedEnemy = null;
+          }
+        }
+
+        // 5. 大招收招
+        if (this.state === 'ultimate_attack') {
+          this.vx = 0; this.vy = 0;
+          this.timer--;
+          if (this.timer <= 0) this.state = 'idle';
+        }
+
+        this.applyPhysics();
+        if (this.z === 0 && this.state === 'jump') this.state = 'idle';
       }
     }
 
-    // 測試用假人敵人
-    class DummyEnemy extends Entity {
-      constructor(x, y) {
-        super(x, y, '#e53e3e'); // 紅色方塊代表敵人
+    // ==========================================
+    // 6. 敵方與 Boss 類別 (包含魅惑叛變與專屬AI)
+    // ==========================================
+    class Enemy extends Entity {
+      constructor(x, y, type) {
+        super(x, y, 45, 80, '#e53e3e', 'enemy');
+        this.type = type;
+        this.team = 'enemy';
+        this.speed = 2;
+        this.timer = 0;
+        this.cooldown = 60;
+        this.immuneToCharm = false;
+
+        // 依據怪物種類設定屬性與顏色
+        if (type === 'Minion') { this.label = '小兵'; this.hp = 50; this.maxHp = 50; }
+        if (type === 'DemonElite') { this.label = '惡魔菁英'; this.color = '#805ad5'; this.hp = 120; this.maxHp = 120; }
+        if (type === 'LongReachElite') { this.label = '長距菁英'; this.color = '#d69e2e'; this.hp = 120; this.maxHp = 120; }
+        if (type === 'TeleportElite') { this.label = '瞬移菁英'; this.color = '#319795'; this.hp = 120; this.maxHp = 120; }
+        if (type === 'SkunkSister') { this.label = '臭鼬姐妹'; this.color = '#b794f4'; this.hp = 40; this.maxHp = 40; this.immuneToCharm = true; }
+        if (type === 'SkunkKingBoss') { 
+          this.label = '【BOSS】臭鼬王'; this.color = '#553c9a'; this.width = 65; this.height = 100; 
+          this.hp = 350; this.maxHp = 350; this.immuneToCharm = true; this.aoeTimer = 300;
+        }
+        if (type === 'FinalBoss') { 
+          this.label = '【最終BOSS】'; this.color = '#9b2c2c'; this.width = 60; this.height = 95; 
+          this.hp = 500; this.maxHp = 500; this.immuneToCharm = true; this.speed = 4.5; this.z = 50;
+        }
       }
-      update() {
-        // 擊飛狀態的摩擦力與落地恢復
+
+      update(player, allEnemies) {
+        if (this.state === 'dead') return;
+
+        // 【核心機制：魅惑死亡攔截】
+        if (this.hp <= 0) {
+          if (this.isCharmed) {
+            this.hp = this.maxHp;
+            this.team = 'ally';
+            this.isCharmed = false;
+            this.label = '[友軍]' + this.label;
+            this.state = 'idle';
+          } else {
+            this.state = 'dead';
+            return;
+          }
+        }
+
+        // 擊飛狀態恢復
         if (this.state === 'knockback') {
           if (this.z === 0 && this.vz <= 0) {
             this.vx *= 0.8;
-            if (Math.abs(this.vx) < 0.5) {
-              this.vx = 0;
-              this.state = 'idle';
+            if (Math.abs(this.vx) < 0.5) { this.vx = 0; this.state = 'idle'; }
+          }
+          this.applyPhysics();
+          return;
+        }
+
+        // 被玩家拘束時停止思考
+        if (['restrained', 'restrained_ground', 'restrained_air'].includes(this.state)) {
+          this.vx = 0; this.vy = 0;
+          this.applyPhysics();
+          return;
+        }
+
+        // 決定索敵目標 (敵對找主角，友軍找其他敵人)
+        let target = player;
+        if (this.team === 'ally') {
+          target = allEnemies.find(e => e.team === 'enemy' && e.state !== 'dead') || null;
+        }
+        if (!target) { this.applyPhysics(); return; }
+
+        let dx = target.x - this.x;
+        let dy = target.y - this.y;
+        let distX = Math.abs(dx);
+        let distY = Math.abs(dy);
+        this.facing = dx > 0 ? 1 : -1;
+        if (this.cooldown > 0) this.cooldown--;
+
+        // --- 正在執行抓技扣血演出 ---
+        if (this.state === 'grabbing_target') {
+          this.vx = 0; this.vy = 0;
+          this.timer--;
+          target.x = this.x + (20 * this.facing);
+          target.y = this.y;
+          if (this.timer % 12 === 0) {
+            target.hp -= 5;
+            spawnEffect(this.x, this.y, 10, 'green_gas', '#68d391', 35, 15);
+          }
+          if (this.timer <= 0) {
+            this.state = 'idle';
+            this.cooldown = 90;
+            target.state = 'knockdown';
+            target.timer = 40;
+          }
+          this.applyPhysics();
+          return;
+        }
+
+        // --- 最終 Boss 玻璃箱處決演出 ---
+        if (this.state === 'glass_box_exec') {
+          this.vx = 0; this.vy = 0;
+          this.timer--;
+          target.x = this.x + (35 * this.facing);
+          target.y = this.y;
+          if (this.timer % 10 === 0) {
+            target.hp -= 8;
+            spawnEffect(target.x, target.y, 20, 'green_gas', '#48bb78', 40, 15);
+          }
+          if (this.timer <= 0) {
+            this.state = 'idle';
+            this.cooldown = 120;
+            target.state = 'knockdown';
+            target.timer = 50;
+          }
+          this.applyPhysics();
+          return;
+        }
+
+        // --- 移動與專屬技能觸發 ---
+        if (this.state === 'idle') {
+          // 最終 Boss 常駐飛行
+          if (this.type === 'FinalBoss' && this.z < 50) this.z += 2;
+
+          // 簡單追擊移動
+          if (distX > 45) this.vx = this.speed * this.facing;
+          else this.vx = 0;
+          if (distY > 10) this.vy = (this.speed * 0.6) * (dy > 0 ? 1 : -1);
+          else this.vy = 0;
+
+          // 【各角色專屬招式判定】
+          if (this.cooldown <= 0 && target.invincibleTimer <= 0) {
+            
+            // 1. 惡魔菁英：中距離或對空尾巴拉拽
+            if (this.type === 'DemonElite' && (target.z > 15 || (distX > 50 && distX < 130 && distY < 25))) {
+              this.state = 'grabbing_target'; this.timer = 50; target.state = 'restrained'; target.z = 0;
+            }
+            // 2. 長距菁英：倒地追擊 或 長距離抓技
+            else if (this.type === 'LongReachElite' && distY < 25 && (distX < 100 || (target.state === 'knockdown' && distX < 70))) {
+              this.state = 'grabbing_target'; this.timer = 50; target.state = 'restrained_ground';
+            }
+            // 3. 瞬移菁英：固定遠距離瞬間移動抓取
+            else if (this.type === 'TeleportElite' && distX >= 150 && distX <= 210 && distY < 25 && target.z === 0) {
+              this.x = target.x - (20 * this.facing);
+              this.state = 'grabbing_target'; this.timer = 50; target.state = 'restrained';
+            }
+            // 4. 第三關 Boss 臭鼬王：召喚姐妹 + 全地圖毒氣
+            else if (this.type === 'SkunkKingBoss') {
+              this.aoeTimer--;
+              if (this.aoeTimer <= 0) {
+                spawnEffect(canvas.width / 2, 370, 0, 'yellow_gas', '#d69e2e', 400, 30);
+                if (target.z < 25) { target.hp -= 15; target.state = 'knockdown'; target.timer = 30; }
+                this.aoeTimer = 350;
+              }
+              if (Math.random() < 0.01 && allEnemies.filter(e => e.type === 'SkunkSister' && e.state !== 'dead').length < 2) {
+                let sister = new Enemy(this.x + 50, this.y, 'SkunkSister');
+                if (Math.random() > 0.5) sister.z = 80; // 空中姐妹
+                allEnemies.push(sister);
+              }
+              // 半血以下近身致命抓技
+              if (this.hp < this.maxHp / 2 && distX < 55 && distY < 25 && target.z === 0) {
+                this.state = 'grabbing_target'; this.timer = 70; target.state = 'restrained_ground';
+              }
+            }
+            // 5. 第五關最終 Boss：半血玻璃箱處決 + 空中/中距離俯衝攔截
+            else if (this.type === 'FinalBoss') {
+              if (this.hp < this.maxHp / 2 && distX < 85 && distY < 25 && Math.random() < 0.05) {
+                this.z = 0; this.state = 'glass_box_exec'; this.timer = 90; target.state = 'restrained_box';
+              } else if ((target.z > 0 || (distX >= 60 && distX <= 130)) && distY < 25) {
+                this.z = 0; this.state = 'grabbing_target'; this.timer = 60; target.state = 'restrained_ground';
+              }
+            }
+            // 6. 一般近身攻擊 (小兵與所有菁英的基礎近戰)
+            else if (distX <= 45 && distY < 20 && Math.abs(target.z - this.z) < 25) {
+              if (this.type === 'Minion' || this.type === 'SkunkSister') {
+                target.hp -= 5;
+                this.cooldown = 60;
+              } else {
+                this.state = 'grabbing_target'; this.timer = 45; target.state = 'restrained';
+              }
             }
           }
         }
@@ -190,36 +660,91 @@
       }
     }
 
-    // 初始化實體
-    const player = new Player(200, 320);
-    const enemies = [
-      new DummyEnemy(450, 320),
-      new DummyEnemy(550, 380)
+    // ==========================================
+    // 7. 五關推進腳本與主迴圈
+    // ==========================================
+    const STAGES = [
+      ['Minion', 'Minion'],                                       // 第 1 關：基礎練手
+      ['Minion', 'DemonElite', 'LongReachElite'],                 // 第 2 關：菁英初現
+      ['SkunkKingBoss'],                                          // 第 3 關：臭鼬王 Boss
+      ['DemonElite', 'LongReachElite', 'TeleportElite', 'Minion'],// 第 4 關：高難度混編
+      ['FinalBoss']                                               // 第 5 關：最終決戰
     ];
 
-    // 遊戲主迴圈
+    let currentStage = 0;
+    let player = new Player(150, 360);
+    let enemies = [];
+    let stageClearTimer = 0;
+
+    function loadStage(stageIndex) {
+      enemies = [];
+      let wave = STAGES[stageIndex];
+      wave.forEach((type, idx) => {
+        enemies.push(new Enemy(650 + (idx * 60), 310 + (idx * 35), type));
+      });
+    }
+
     function gameLoop() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // 畫出地板背景線條 (輔助視覺深度)
-      ctx.fillStyle = '#2d3748';
+      // 1. 繪製背景地板與關卡資訊
+      ctx.fillStyle = '#4a5568';
       ctx.fillRect(0, FLOOR_MIN_Y, canvas.width, FLOOR_MAX_Y - FLOOR_MIN_Y);
+      
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 20px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(`第 ${currentStage + 1} / 5 關`, 20, 35);
 
-      // 更新邏輯
+      // 2. 檢查是否全滅敵人，準備進入下一關
+      let activeEnemies = enemies.filter(e => e.state !== 'dead' && e.team === 'enemy');
+      if (activeEnemies.length === 0) {
+        if (currentStage < STAGES.length - 1) {
+          stageClearTimer++;
+          ctx.fillStyle = '#fbd38d';
+          ctx.fillText('區域清空！準備前往下一關...', 320, 150);
+          if (stageClearTimer > 120) {
+            currentStage++;
+            stageClearTimer = 0;
+            player.x = 150; // 重置主角位置
+            player.hp = Math.min(player.maxHp, player.hp + 30); // 過關回血
+            loadStage(currentStage);
+          }
+        } else {
+          ctx.fillStyle = '#68d391';
+          ctx.font = 'bold 36px sans-serif';
+          ctx.fillText('恭喜通關！擊敗了最終 BOSS！', 220, 200);
+        }
+      }
+
+      // 3. 檢查主角死亡
+      if (player.hp <= 0) {
+        ctx.fillStyle = '#fc8181';
+        ctx.font = 'bold 36px sans-serif';
+        ctx.fillText('你被打敗了！重新整理頁面再戰', 220, 200);
+        return; // 停止遊戲迴圈
+      }
+
+      // 4. 更新所有角色與特效
       player.update(enemies);
-      enemies.forEach(e => e.update());
+      enemies.forEach(e => e.update(player, enemies));
+      effects.forEach(ef => ef.update());
+      effects = effects.filter(ef => ef.timer > 0);
 
-      // 【關鍵渲染順序】2.5D 深度排序 (Y 軸越大的越靠近螢幕前方，必須越晚畫才不會被遮擋)
-      let allEntities = [player, ...enemies];
-      allEntities.sort((a, b) => a.y - b.y);
-
-      // 依序繪製
-      allEntities.forEach(entity => entity.draw(ctx));
+      // 5. 【2.5D 關鍵】依照 Y 軸深度排序後依序繪製
+      let renderList = [player, ...enemies.filter(e => e.state !== 'dead')];
+      renderList.sort((a, b) => a.y - b.y);
+      renderList.forEach(entity => entity.draw(ctx));
+      effects.forEach(ef => ef.draw(ctx));
 
       requestAnimationFrame(gameLoop);
     }
 
-    gameLoop();
+    // 載入圖片並啟動第一關
+    loadAssets(() => {
+      loadStage(0);
+      gameLoop();
+    });
   </script>
 </body>
 </html>
