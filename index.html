@@ -214,12 +214,13 @@
       final_box_ult:    'sounds/final_box_ult.mp3'     // 18. 魔王箱子拘束 (5.0s)
     };
 
+        // 替換原本的 CUSTOM_SOUNDS 初始化區塊
     const CUSTOM_SOUNDS = {};
     for (let key in AUDIO_PATHS) {
-      let audio = new Audio(AUDIO_PATHS[key]);
+      let audio = new Audio();
       audio.preload = 'auto';
-      audio.isReady = false;
-      audio.addEventListener('canplaythrough', () => { audio.isReady = true; });
+      audio.src = AUDIO_PATHS[key];
+      audio.load(); // 強制瀏覽器立即開始預載
       CUSTOM_SOUNDS[key] = audio;
     }
 
@@ -297,9 +298,31 @@
     }
 
     // 播放指定音效，並對齊指定秒數
+    // 替換原本的 playSFX 函式
     function playSFX(type, durationSec = null) {
       const chkSound = document.getElementById('chk-sound');
       if (chkSound && !chkSound.checked) return null;
+
+      const custom = CUSTOM_SOUNDS[type];
+      // readyState >= 2 (HAVE_CURRENT_DATA) 代表已載入可播放資料，且未發生載入錯誤
+      if (custom && !custom.error && custom.readyState >= 2) {
+        const clone = custom.cloneNode();
+        clone.volume = 0.8;
+        clone.play().catch(() => playSynthSound(type, durationSec));
+        if (durationSec) {
+          setTimeout(() => {
+            clone.pause();
+            clone.currentTime = 0;
+          }, durationSec * 1000);
+        }
+        return clone;
+      } else {
+        // 若尚未載入完成，嘗試觸發一次載入以便下次使用
+        if (custom && custom.readyState === 0) custom.load();
+        playSynthSound(type, durationSec);
+        return null;
+      }
+    }
 
       const custom = CUSTOM_SOUNDS[type];
       if (custom && custom.isReady) {
