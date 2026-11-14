@@ -505,10 +505,13 @@
         if (this.untargetable) {
           ctx.globalAlpha = 0.85;
         }
-
         if (img && img.complete && img.naturalWidth > 0) {
-          let drawH = this.height;
-          let drawW = (img.naturalWidth / img.naturalHeight) * drawH;
+          let isGroundPose = ['restrained_ground', 'knockdown', 'knockback', 'skill2_pin', 'ground_hold'].includes(this.state);
+          let maxW = isGroundPose ? this.height * 1.15 : this.height * 1.4;
+          let maxH = isGroundPose ? this.height * 0.55 : this.height;
+          let scale = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight);
+          let drawW = img.naturalWidth * scale;
+          let drawH = img.naturalHeight * scale;
           ctx.drawImage(img, -drawW / 2, -drawH, drawW, drawH);
         } else {
           ctx.fillStyle = this.isPoisoned ? '#48bb78' : this.color;
