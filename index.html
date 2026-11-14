@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>2.5D 動作遊戲原型測試</title>
+  <style>
+    body { margin: 0; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; color: white; font-family: sans-serif; }
+    canvas { background: #4a5568; border: 3px solid #cbd5e0; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+    #ui { position: absolute; top: 20px; text-align: center; pointer-events: none; }
+  </style>
+</head>
+<body>
+
+  <div id="ui">
+    <h2>2.5D 引擎原型測試</h2>
+    <p>方向鍵：移動 (X/Y軸) ｜ Space：跳躍 (Z軸) ｜ Z：普攻抓技 ｜ X：1技能群控</p>
+  </div>
+  <canvas id="gameCanvas" width="800" height="450"></canvas>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // 場地 Y 軸可行走範圍限制 (地板深度)
+    const FLOOR_MIN_Y = 250;
+    const FLOOR_MAX_Y = 420;
+    const GRAVITY = 0.6;
+
+    // 按鍵狀態監聽
+    const keys = {};
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    // 基礎角色類別 (包含 2.5D 座標與繪製邏輯)
+    class Entity {
+      constructor(x, y, color) {
+        this.x = x;
+        this.y = y; // 深度 (地板位置)
+        this.z = 0; // 高度 (跳躍用)
+        this.vx = 0;
+        this.vy = 0;
+        this.vz = 0;
+        this.width = 40;
+        this.height = 70;
+        this.color = color;
+        this.facing = 1; // 1: 右, -1: 左
+        this.state = 'idle';
+        this.hp = 100;
+      }
+
+      applyPhysics() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.z += this.vz;
+
+        // 重力與落地判定
+        if (this.z > 0) {
+          this.vz -= GRAVITY;
+        } else {
+          this.z = 0;
+          this.vz = 0;
+        }
+
+        // 限制 Y 軸走位不超出地板邊界
+        if (this.y < FLOOR_MIN_Y) this.y = FLOOR_MIN_Y;
+        if (this.y > FLOOR_MAX_Y) this.y = FLOOR_MAX_Y;
+      }
+
+      draw(ctx) {
+        // 1. 畫地板影子 (永遠貼在 z=0 的 y 座標上)
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+        ctx.beginPath();
+        ctx.ellipse(this.x, this.y, this.width / 2, 10, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 2. 計算實際渲染的 Y 座標 (扣掉跳躍高度 Z)
+        let renderY = this.y - this.z - this.height;
+
+        // 3. 畫出角色本體 (之後這裡替換成你的 Spritesheet 圖片)
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x - this.width / 2, renderY, this.width, this.height);
+
+        // 畫出面向指示 (眼睛)
+        ctx.fillStyle = 'white';
+        let eyeX = this.facing === 1 ? this.x + 8 : this.x - 14;
+        ctx.fillRect(eyeX, renderY + 12, 6, 6);
+
+        // 顯示狀態與血量
+        ctx.fillStyle = '#fff';
+        ctx.font = '12px Arial';
+        ctx.fillText(`HP:${this.hp} [${this.state}]`, this.x - 30, renderY - 8);
+      }
+    }
+
+    // 玩家類別
+    class Player extends Entity {
+      constructor(x, y) {
+        super(x, y, '#3182ce'); // 藍色方塊代表主角
+        this.speed = 4;
+        this.grabbedEnemy = null;
+        this.comboTimer = 0;
+      }
+
+      update(enemies) {
+        // 自由移動狀態
+        if (this.state === 'idle' || this.state === 'walk') {
+          this.vx = 0;
+          this.vy = 0;
+
+          if (keys['ArrowLeft']) { this.vx = -this.speed; this.facing = -1; }
+          if (keys['ArrowRight']) { this.vx = this.speed; this.facing = 1; }
+          if (keys['ArrowUp']) { this.vy = -this.speed * 0.7; } // Y軸移動通常稍微慢一點較自然
+          if (keys['ArrowDown']) { this.vy = this.speed * 0.7; }
+
+          // 跳躍 (Space)
+          if (keys['Space'] && this.z === 0) {
+            this.vz = 12;
+          }
+
+          // 普攻：地面抓技 (Z鍵)
+          if (keys['KeyZ'] && this.z === 0) {
+            let target = this.checkHitbox(enemies, 50, 20, 30);
+            if (target) {
+              this.state = 'grab_attack';
+              this.comboTimer = 60;
+              this.grabbedEnemy = target;
+              target.state = 'restrained';
+            }
+          }
+        }
+
+        // 執行地面拘束連段
+        if (this.state === 'grab_attack' && this.grabbedEnemy) {
+          this.vx = 0;
+          this.vy = 0;
+          this.grabbedEnemy.x = this.x + (25 * this.facing);
+          this.grabbedEnemy.y = this.y;
+          this.comboTimer--;
+
+          if (this.comboTimer % 10 === 0 && this.comboTimer > 10) {
+            this.grabbedEnemy.hp -= 5;
+          }
+
+          if (this.comboTimer <= 0) {
+            this.state = 'idle';
+            this.grabbedEnemy.hp -= 15;
+            this.grabbedEnemy.state = 'knockback';
+            this.grabbedEnemy.vx = 10 * this.facing;
+            this.grabbedEnemy.vz = 8;
+            this.grabbedEnemy = null;
+          }
+        }
+
+        this.applyPhysics();
+      }
+
+      // 2.5D 空間碰撞檢測 (同時驗證 X距離、Y深度、Z高度)
+      checkHitbox(enemies, rangeX, rangeY, rangeZ) {
+        for (let enemy of enemies) {
+          if (enemy.state === 'dead') continue;
+          let dx = (enemy.x - this.x) * this.facing; // 確保敵人在面向的前方
+          let dy = Math.abs(enemy.y - this.y);
+          let dz = Math.abs(enemy.z - this.z);
+
+          if (dx >= 0 && dx <= rangeX && dy <= rangeY && dz <= rangeZ) {
+            return enemy;
+          }
+        }
+        return null;
+      }
+    }
+
+    // 測試用假人敵人
+    class DummyEnemy extends Entity {
+      constructor(x, y) {
+        super(x, y, '#e53e3e'); // 紅色方塊代表敵人
+      }
+      update() {
+        // 擊飛狀態的摩擦力與落地恢復
+        if (this.state === 'knockback') {
+          if (this.z === 0 && this.vz <= 0) {
+            this.vx *= 0.8;
+            if (Math.abs(this.vx) < 0.5) {
+              this.vx = 0;
+              this.state = 'idle';
+            }
+          }
+        }
+        this.applyPhysics();
+      }
+    }
+
+    // 初始化實體
+    const player = new Player(200, 320);
+    const enemies = [
+      new DummyEnemy(450, 320),
+      new DummyEnemy(550, 380)
+    ];
+
+    // 遊戲主迴圈
+    function gameLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // 畫出地板背景線條 (輔助視覺深度)
+      ctx.fillStyle = '#2d3748';
+      ctx.fillRect(0, FLOOR_MIN_Y, canvas.width, FLOOR_MAX_Y - FLOOR_MIN_Y);
+
+      // 更新邏輯
+      player.update(enemies);
+      enemies.forEach(e => e.update());
+
+      // 【關鍵渲染順序】2.5D 深度排序 (Y 軸越大的越靠近螢幕前方，必須越晚畫才不會被遮擋)
+      let allEntities = [player, ...enemies];
+      allEntities.sort((a, b) => a.y - b.y);
+
+      // 依序繪製
+      allEntities.forEach(entity => entity.draw(ctx));
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
+  </script>
+</body>
+</html>
